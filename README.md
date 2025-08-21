@@ -20,6 +20,9 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 ---
 
 ### 🔹 SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
+
+➡️[Übersicht der APIs von SharePoint](sharepoint_APIs.ipynb)
+
 - Sites & Metadaten ➡️[Notebook: SharePoint_Sites Beispiele](sharepoint_Sites.ipynb)
 - Listen (inkl. Paging) ➡️[Notebook: SharePoint_Lists_ Beispiele](sharepoint_Lists.ipynb) 
 - Libraries (inkl. Paging) ➡️[Notebook: SharePoint_Libraries Beispiele](sharepoint_Libraries.ipynb)
