@@ -15,16 +15,16 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Rollen und App-Registrierungen
 - Anmeldungen & Directory-Audit-Logs
 
-➡️ [Notebook: Azure AD Beispiele](notebooks/azure_ad.ipynb)
+➡️ [Notebook: Azure AD Beispiele](azure_ad.ipynb)
 
 ---
 
 ### 🔹 SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
-- Sites & Metadaten ➡️[Notebook: SharePoint_Sites Beispiele](notebooks/sharepoint_Sites.ipynb)
-- Listen (inkl. Paging) ➡️[Notebook: SharePoint_Lists_ Beispiele](notebooks/sharepoint_Lists.ipynb) 
-- Libraries (inkl. Paging) ➡️[Notebook: SharePoint_Libraries Beispiele](notebooks/sharepoint_Libraries.ipynb)
-- Dokumente & Dateien (Upload/Download) ➡️[Notebook: SharePoint_Upload/Download Beispiele](notebooks/sharepoint_UpdloadDownload.ipynb)
-- Berechtigungen auf Site- und Item-Ebene ➡️[Notebook: SharePoint_Permissions Beispiele](notebooks/sharepoint_Permissions.ipynb)
+- Sites & Metadaten ➡️[Notebook: SharePoint_Sites Beispiele](sharepoint_Sites.ipynb)
+- Listen (inkl. Paging) ➡️[Notebook: SharePoint_Lists_ Beispiele](sharepoint_Lists.ipynb) 
+- Libraries (inkl. Paging) ➡️[Notebook: SharePoint_Libraries Beispiele](sharepoint_Libraries.ipynb)
+- Dokumente & Dateien (Upload/Download) ➡️[Notebook: SharePoint_Upload/Download Beispiele](sharepoint_UpdloadDownload.ipynb)
+- Berechtigungen auf Site- und Item-Ebene ➡️[Notebook: SharePoint_Permissions Beispiele](sharepoint_Permissions.ipynb)
 
 ---
 
@@ -33,7 +33,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Kalender & Termine
 - Kontakte
 
-➡️ [Notebook: Outlook Beispiele](notebooks/outlook.ipynb)
+➡️ [Notebook: Outlook Beispiele](outlook.ipynb)
 
 ---
 
@@ -42,7 +42,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Mitglieder
 - Chats & Nachrichten
 
-➡️ [Notebook: Teams Beispiele](notebooks/teams.ipynb)
+➡️ [Notebook: Teams Beispiele](teams.ipynb)
 
 ---
 
@@ -50,7 +50,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Geräteinformationen (Compliance, Konfiguration)
 - Apps & Policies
 
-➡️ [Notebook: Intune Beispiele](notebooks/intune.ipynb)
+➡️ [Notebook: Intune Beispiele](intune.ipynb)
 
 ---
 
@@ -58,7 +58,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Office 365 Nutzungsstatistiken (Teams, SharePoint, Exchange)
 - Teams User Activity
 
-➡️ [Notebook: Reports Beispiele](notebooks/reports.ipynb)
+➡️ [Notebook: Reports Beispiele](reports.ipynb)
 
 ---
 
@@ -66,7 +66,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Planner: Pläne & Tasks
 - Microsoft To Do: Aufgabenlisten
 
-➡️ [Notebook: Planner/ToDo Beispiele](notebooks/planner_todo.ipynb)
+➡️ [Notebook: Planner/ToDo Beispiele](planner_todo.ipynb)
 
 ---
 
@@ -74,7 +74,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 - Defender Alerts
 - Security Incidents
 
-➡️ [Notebook: Security Beispiele](notebooks/security.ipynb)
+➡️ [Notebook: Security Beispiele](security.ipynb)
 
 ---
 
