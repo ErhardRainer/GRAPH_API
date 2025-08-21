@@ -19,13 +19,12 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 
 ---
 
-### 🔹 SharePoint & OneDrive
-- Sites & Metadaten
-- Listen & Libraries (inkl. Paging)
-- Dokumente & Dateien (Upload/Download)
-- Berechtigungen auf Site- und Item-Ebene
-
-➡️ [Notebook: SharePoint Beispiele](notebooks/sharepoint.ipynb)
+### 🔹 SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
+- Sites & Metadaten ➡️[Notebook: SharePoint Beispiele](notebooks/sharepoint_Sites.ipynb)
+- Listen (inkl. Paging) ➡️[Notebook: SharePoint Beispiele](notebooks/sharepoint_Listen.ipynb) 
+- Libraries (inkl. Paging) ➡️[Notebook: SharePoint Beispiele](notebooks/sharepoint_Libraries.ipynb)
+- Dokumente & Dateien (Upload/Download) ➡️[Notebook: SharePoint Beispiele](notebooks/sharepoint_UpdloadDownload.ipynb)
+- Berechtigungen auf Site- und Item-Ebene ➡️[Notebook: SharePoint Beispiele](notebooks/sharepoint_Permissions.ipynb)
 
 ---
 
