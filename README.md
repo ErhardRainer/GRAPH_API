@@ -6,6 +6,9 @@ Damit können Daten aus **Azure Active Directory (Entra ID)**, **SharePoint**, *
 Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit typischen Endpunkten und wird mit **praktischen Beispielen in Jupyter Notebooks** ergänzt.
 
 ---
+## Konfigurationsdatei
+Alle Skripte (nicht die fertigen Lösungen) erfordern eine config.json, um die Passwörter udgl. zu speichern. ➡️ [Notebook: Umgang mit der config.json](config_json.ipynb).
+Das ist aber nicht die beste Lösung für den produktiven Einsatz.
 
 ## 📚 Hauptbereiche der Graph API
 
