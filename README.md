@@ -32,7 +32,7 @@ fertige Lösungen
 - Berechtigungen auf Site- und Item-Ebene ➡️[Notebook: SharePoint_Permissions Beispiele](sharepoint_Permissions.ipynb)
 
 **fertige Lösungen**
-- [SharePoint2SQL](Solution\Sharepoint2SQLUserPW.ipynb) *fertig (alte Lösung)* - ein umfangreiches python Script, das es ermöglicht über eine SQL-Tabelle zu konfigurieren, welche SharePoint Listen auf den SQL-Server gesynct werden sollen. (unidirektional) Wurde durch das nachfolgende Skript abgelöst.
+- [SharePoint2SQL](Solution/Sharepoint2SQLUserPW.ipynb) *fertig (alte Lösung)* - ein umfangreiches python Script, das es ermöglicht über eine SQL-Tabelle zu konfigurieren, welche SharePoint Listen auf den SQL-Server gesynct werden sollen. (unidirektional) Wurde durch das nachfolgende Skript abgelöst.
 - [SharePoint Graph-API sync to SQL](Solution\Sharepoint2SQL.ipynb) *fertig (neue Lösung)* - ein umfangreiches python Script, das es ermöglicht über eine SQL-Tabelle zu konfigurieren, welche SharePoint Listen auf den SQL-Server gesynct werden sollen. (unidirektional)
 - [SharePoint SQL bidirectional sync](Solution\Sharepoint2SQL_bidirectional.ipynb) *planning* - ein umfangreiches python Script, das bidirectional eine SharePoint Liste und SQL-Tabele syncronisiert.
 - [FileShare2Libarary](Solution\Sharepoint2Library.ipynb) *planning* - ein umfangreiches pyhton Script, das eine SharePoint Biblitothek und ein Netzlaufwerk syncron hält.
