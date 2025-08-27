@@ -18,7 +18,7 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 ➡️ [Notebook: Azure AD Beispiele](azure_ad.ipynb)
 
 fertige Lösungen
-- [MonitoringAD](Solution\MonitoringAD.ipynb) - ein python Script inklusive Power BI, damit man Änderungen im AD tracken kann (User, Gruppen, Lizenzen usw.)
+- [MonitoringAD](Solution\MonitoringAD.ipynb) **planning** - ein python Script inklusive Power BI, damit man Änderungen im AD tracken kann (User, Gruppen, Lizenzen usw.)
 ---
 
 ### 🔹 SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
@@ -32,9 +32,9 @@ fertige Lösungen
 - Berechtigungen auf Site- und Item-Ebene ➡️[Notebook: SharePoint_Permissions Beispiele](sharepoint_Permissions.ipynb)
 
 fertige Lösungen
-- [SharePoint Graph-API sync to SQL](Solution\Sharepoint2SQL.ipynb) - ein umfangreiches python Script, das es ermöglicht über eine SQL-Tabelle zu konfigurieren, welche SharePoint Listen auf den SQL-Server gesynct werden sollen. (unidirektional)
-- [SharePoint SQL bidirectional sync](Solution\Sharepoint2SQL_bidirectional.ipynb) - ein umfangreiches python Script, das bidirectional eine SharePoint Liste und SQL-Tabele syncronisiert.
-- [FileShare2Libarary](Solution\Sharepoint2Library.ipynb) - ein umfangreiches pyhton Script, das eine SharePoint Biblitothek und ein Netzlaufwerk syncron hält.
+- [SharePoint Graph-API sync to SQL](Solution\Sharepoint2SQL.ipynb) **fertig** - ein umfangreiches python Script, das es ermöglicht über eine SQL-Tabelle zu konfigurieren, welche SharePoint Listen auf den SQL-Server gesynct werden sollen. (unidirektional)
+- [SharePoint SQL bidirectional sync](Solution\Sharepoint2SQL_bidirectional.ipynb) **planning** - ein umfangreiches python Script, das bidirectional eine SharePoint Liste und SQL-Tabele syncronisiert.
+- [FileShare2Libarary](Solution\Sharepoint2Library.ipynb) **planning** - ein umfangreiches pyhton Script, das eine SharePoint Biblitothek und ein Netzlaufwerk syncron hält.
 
 ---
 
