@@ -22,10 +22,16 @@ Jeder der API-Aufrufe benötigt eine **TenantID**, **ApplicationID** (ClientID) 
 - Rollen und App-Registrierungen
 - Anmeldungen & Directory-Audit-Logs
 
-➡️ [Notebook: Azure AD Beispiele](azure_ad.ipynb)
+➡️ [Notebook: Azure AD auslesen](azure_ad.Read.ipynb)
+
+➡️ [Notebook: Azure AD User bearbeiten](azure_ad.User.ipynb)
+
+➡️ [Notebook: Azure AD Gruppen bearbeiten](azure_ad.Group.ipynb)
+
+➡️ [Notebook: Azure AD Rollen bearbeiten](azure_ad.Rolls.ipynb)
 
 fertige Lösungen
-- [MonitoringAD](Solution\MonitoringAD.ipynb) **planning** - ein python Script inklusive Power BI, damit man Änderungen im AD tracken kann (User, Gruppen, Lizenzen usw.)
+- [MonitoringAD](https://github.com/ErhardRainer/MONITORING_AzureActiveDirectory) **planning** - eine gesamt Lösung, die ein AD-Monitoring Dashboard als Ergebnis hat
 ---
 
 ### 🔹 SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
