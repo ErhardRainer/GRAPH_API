@@ -10,6 +10,10 @@ Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit 
 Alle Skripte (nicht die fertigen Lösungen) erfordern eine config.json, um die Passwörter udgl. zu speichern. ➡️ [Notebook: Umgang mit der config.json](config_json.ipynb).
 Das ist aber nicht die beste Lösung für den produktiven Einsatz.
 
+## Application
+Jeder der API-Aufrufe benötigt eine **TenantID**, **ApplicationID** (ClientID) und ein **ClientSecret**. 
+➡️ [Notebook: Tests rund um die Application](test_Application.ipynb).
+
 ## 📚 Hauptbereiche der Graph API
 
 ### 🔹 Azure Active Directory (Entra ID)
