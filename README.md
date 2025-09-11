@@ -135,6 +135,7 @@ Ein modulares Framework, das Auth, HTTP, Retry, OData, Parameter & Output bünde
 * **Parameter‑Resolver**: CLI/JSON/Config (später SP‑Liste) – schema‑getrieben
 * **Outputs**: Writer‑Adapter (CSV, später Parquet/Excel/SQL)
 * **Diagnose**: konsistente `info`‑Objekte & Log‑Puffer (als DataFrame exportierbar)
+[* **Benennung der Funktionen**:](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/domains/README.md)
 
 ### 🧩 Architektur
 
@@ -147,13 +148,8 @@ graphfw/
     util.py       # TZ-Policy, GUID-Strip, UTF‑8, SP-Name-Encoding, Masking
     logbuffer.py  # print + Buffer → .to_df()
   domains/
-    sp/client.py        # Lists: columns_df(), items_df() …
-    aad/client.py       # Users/Groups/Apps/Logs …
-    exchange/client.py  # Mail/Calendar/Contacts …
-    teams/client.py     # Teams/Channels/Chats …
-    intune/client.py    # Devices/Compliance …
-    planner/client.py   # Plans/Tasks …
-    analytics/client.py # Reports …
+     sharepoint/lists/items.py
+     uva.
   params/
     schema.py, resolve.py
   io/writers/
