@@ -8,13 +8,13 @@ Zweck:
     - Dateiname wird aus Prefix/Postfix aufgebaut, optional mit Timestamp.
     - Gibt den *vollständigen Pfad* der erzeugten Datei zurück.
 
-Namensschema:
-    <prefix>[_<postfix>][_<YYYYMMDD>_<hhmmss>].csv
+Namensschema (aktualisiert):
+    <prefix>[_<YYYYMMDD>_<hhmmss>][_<postfix>].csv
 
-Parameter (öffentlich, beide Funktionen zusammengefasst):
+Parameter (öffentlich):
     - prefix:      str      — erster Namensbestandteil (wird für Dateinamen saniert)
-    - postfix:     str|None — optionaler zweiter Bestandteil (wird saniert)
-    - timestamp:   bool     — ob Datum/Uhrzeit angehängt werden (Default: True)
+    - postfix:     str|None — optionaler dritter Bestandteil (wird saniert)
+    - timestamp:   bool     — ob Datum/Uhrzeit *zwischen* prefix und postfix angehängt
     - encoding:    str      — CSV-Encoding (Default: "utf-8-sig")
     - index:       bool     — DataFrame-Index mitschreiben (Default: False)
     - date_format: str|None — pandas date_format (Default: None)
@@ -35,7 +35,7 @@ Sicherheits-/Robustheitsverhalten:
     - Schreibvorgang ist deterministisch bzgl. Namensaufbau.
 
 Autor: Erhard Rainer (www.erhard-rainer.com)
-Version: 0.2.0 (2025-09-12)
+Version: 2.1.0 (2025-09-12)
 ===============================================================================
 """
 from __future__ import annotations
@@ -61,9 +61,9 @@ def build_csv_path(
     prefix : str
         Erster Namensbestandteil; wird für Dateinamen saniert.
     postfix : str | None, optional
-        Optionaler zweiter Bestandteil; wird saniert. Falls leer/None, ausgelassen.
+        Optionaler dritter Bestandteil; wird saniert. Falls leer/None, ausgelassen.
     timestamp : bool, default True
-        Ob ein Zeitstempel YYYYMMDD_hhmmss angehängt wird.
+        Ob ein Zeitstempel YYYYMMDD_hhmmss angehängt wird (zwischen prefix und postfix).
 
     Returns
     -------
@@ -72,17 +72,16 @@ def build_csv_path(
 
     Beispiele
     --------
-    >>> build_csv_path(prefix="SiteA_ListB", timestamp=False)
-    PosixPath('/cwd/SiteA_ListB.csv')
+    >>> build_csv_path(prefix="SiteA", postfix="ListB", timestamp=True).name
+    'SiteA_20250912_133001_ListB.csv'
     """
-    # Hilfsfunktion lokal kapseln
     def _compose_filename(prefix_: str, postfix_: Optional[str], add_ts: bool) -> str:
+        # Reihenfolge: prefix, (timestamp), (postfix)
         parts = [sanitize_for_filename(prefix_)]
-        if postfix_:
-            parts.append(sanitize_for_filename(postfix_))
         if add_ts:
             parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
-        # Filtere leere Stücke und verbinde mit Unterstrich
+        if postfix_:
+            parts.append(sanitize_for_filename(postfix_))
         stem = "_".join([p for p in parts if p])
         return f"{stem}.csv"
 
@@ -111,9 +110,9 @@ def write_csv(
     prefix : str
         Erster Namensbestandteil; wird für Dateinamen saniert.
     postfix : str | None, optional
-        Optionaler zweiter Bestandteil; wird saniert.
+        Optionaler dritter Bestandteil; wird saniert.
     timestamp : bool, default True
-        Ob ein Zeitstempel YYYYMMDD_hhmmss angehängt wird.
+        Ob ein Zeitstempel YYYYMMDD_hhmmss *zwischen* prefix und postfix angehängt wird.
     encoding : str, default "utf-8-sig"
         Encoding für die CSV-Datei (Excel-freundlich).
     index : bool, default False
@@ -136,14 +135,10 @@ def write_csv(
     """
     target = build_csv_path(prefix=prefix, postfix=postfix, timestamp=timestamp)
 
-    # Erzeuge eindeutigen Pfad, falls nicht überschrieben werden soll
     if target.exists() and not overwrite:
         target = _next_free_path(target)
 
-    # Sicherstellen, dass Zielordner existiert (i. d. R. cwd, aber robust)
     target.parent.mkdir(parents=True, exist_ok=True)
-
-    # Schreiben (pandas-kompatibel)
     df.to_csv(target, index=index, encoding=encoding, date_format=date_format)
 
     return target
