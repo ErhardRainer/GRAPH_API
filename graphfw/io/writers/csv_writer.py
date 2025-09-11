@@ -1,90 +1,182 @@
-# csv_writer.py
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
-graphfw.io.writers.csv_writer — CSV-Writer & Pfadgenerator
+graphfw.io.writers.csv_writer — Minimalistischer CSV-Writer
 ===============================================================================
 Zweck:
-    - Einheitliche CSV-Ausgabe mit verlässlicher Namenskonvention:
-        <SiteToken>_<ListToken>_<YYYYMMDD>_<hhmmss>.csv
-      (Excel-freundliches UTF-8-SIG-Encoding)
-    - Kapselt Ordneranlage, Dateinamens-Sanitizing und Rückgabe eines
-      Output-Infos (Pfad, Zeilen, Encoding).
+    - Stark vereinfachte Schnittstelle für CSV-Export.
+    - Dateiname wird aus Prefix/Postfix aufgebaut, optional mit Timestamp.
+    - Gibt den *vollständigen Pfad* der erzeugten Datei zurück.
+
+Namensschema:
+    <prefix>[_<postfix>][_<YYYYMMDD>_<hhmmss>].csv
+
+Parameter (öffentlich, beide Funktionen zusammengefasst):
+    - prefix:      str      — erster Namensbestandteil (wird für Dateinamen saniert)
+    - postfix:     str|None — optionaler zweiter Bestandteil (wird saniert)
+    - timestamp:   bool     — ob Datum/Uhrzeit angehängt werden (Default: True)
+    - encoding:    str      — CSV-Encoding (Default: "utf-8-sig")
+    - index:       bool     — DataFrame-Index mitschreiben (Default: False)
+    - date_format: str|None — pandas date_format (Default: None)
+    - overwrite:   bool     — existierende Datei überschreiben (Default: False)
+
+Rückgabe:
+    - build_csv_path(...): pathlib.Path
+    - write_csv(...):      pathlib.Path (Pfad der erzeugten Datei)
 
 Abhängigkeiten:
-    * Standardbibliothek; pandas-ähnliche DataFrame API (df.to_csv).
+    * Standardbibliothek; pandas-kompatible DataFrame API (df.to_csv).
+    * graphfw.core.util.sanitize_for_filename
 
-Autor: dein Projekt
-Version: 1.0.0 (2025-09-11)
+Sicherheits-/Robustheitsverhalten:
+    - Wenn overwrite=False und die Zieldatei existiert, wird automatisch ein
+      eindeutiger Suffix _001, _002, ... angehängt.
+    - Prefix/Postfix werden Dateinamen-sicher gemacht.
+    - Schreibvorgang ist deterministisch bzgl. Namensaufbau.
+
+Autor: Erhard Rainer (www.erhard-rainer.com)
+Version: 0.2.0 (2025-09-12)
 ===============================================================================
 """
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
-from urllib.parse import urlsplit
+from typing import Any, Optional
 
-from graphfw.core.util import sanitize_for_filename  # passt ggf. an dein Package an
-
-
-def site_token_for_filename(site_url: str) -> str:
-    """
-    Erzeugt einen stabilen Token aus einer Site-URL:
-      host + letzter Pfadbestandteil (z. B. 'contoso.sharepoint.com_sites-TeamA')
-    """
-    u = urlsplit((site_url or "").rstrip("/"))
-    host = sanitize_for_filename(u.netloc or "host")
-    last = sanitize_for_filename((u.path or "").rstrip("/").split("/")[-1] or host)
-    return f"{host}_{last}"
+from graphfw.core.util import sanitize_for_filename
 
 
 def build_csv_path(
     *,
-    site_url: str,
-    list_title: str,
-    out_dir: Union[str, Path],
+    prefix: str,
+    postfix: Optional[str] = None,
     timestamp: bool = True,
-    suffix: str = ".csv",
 ) -> Path:
     """
-    Erzeugt den Zielpfad für eine CSV-Datei. Ordner wird NICHT angelegt.
+    Erzeugt den Zielpfad (im aktuellen Arbeitsverzeichnis) für die CSV-Datei.
+
+    Parameter
+    ----------
+    prefix : str
+        Erster Namensbestandteil; wird für Dateinamen saniert.
+    postfix : str | None, optional
+        Optionaler zweiter Bestandteil; wird saniert. Falls leer/None, ausgelassen.
+    timestamp : bool, default True
+        Ob ein Zeitstempel YYYYMMDD_hhmmss angehängt wird.
+
+    Returns
+    -------
+    Path
+        Vollständiger Pfad im aktuellen Arbeitsverzeichnis (cwd).
+
+    Beispiele
+    --------
+    >>> build_csv_path(prefix="SiteA_ListB", timestamp=False)
+    PosixPath('/cwd/SiteA_ListB.csv')
     """
-    out_dir = Path(out_dir)
-    site_tok = site_token_for_filename(site_url)
-    list_tok = sanitize_for_filename(list_title)
-    if timestamp:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        fname = f"{site_tok}_{list_tok}_{ts}{suffix}"
-    else:
-        fname = f"{site_tok}_{list_tok}{suffix}"
-    return out_dir / fname
+    # Hilfsfunktion lokal kapseln
+    def _compose_filename(prefix_: str, postfix_: Optional[str], add_ts: bool) -> str:
+        parts = [sanitize_for_filename(prefix_)]
+        if postfix_:
+            parts.append(sanitize_for_filename(postfix_))
+        if add_ts:
+            parts.append(datetime.now().strftime("%Y%m%d_%H%M%S"))
+        # Filtere leere Stücke und verbinde mit Unterstrich
+        stem = "_".join([p for p in parts if p])
+        return f"{stem}.csv"
+
+    filename = _compose_filename(prefix, postfix, timestamp)
+    return Path.cwd() / filename
 
 
 def write_csv(
     df: Any,
     *,
-    site_url: str,
-    list_title: str,
-    out_dir: Union[str, Path],
+    prefix: str,
+    postfix: Optional[str] = None,
     timestamp: bool = True,
     encoding: str = "utf-8-sig",
     index: bool = False,
     date_format: Optional[str] = None,
-) -> Dict[str, Any]:
+    overwrite: bool = False,
+) -> Path:
     """
-    Schreibt ein DataFrame als CSV in 'out_dir' mit standardisiertem Dateinamen.
+    Schreibt ein DataFrame als CSV in das aktuelle Arbeitsverzeichnis (cwd).
 
-    Rückgabe:
-        {"path": Path, "rows": int, "encoding": str}
+    Parameter
+    ----------
+    df : Any
+        Pandas-kompatibles DataFrame mit .to_csv(...).
+    prefix : str
+        Erster Namensbestandteil; wird für Dateinamen saniert.
+    postfix : str | None, optional
+        Optionaler zweiter Bestandteil; wird saniert.
+    timestamp : bool, default True
+        Ob ein Zeitstempel YYYYMMDD_hhmmss angehängt wird.
+    encoding : str, default "utf-8-sig"
+        Encoding für die CSV-Datei (Excel-freundlich).
+    index : bool, default False
+        DataFrame-Index mitschreiben.
+    date_format : str | None, optional
+        Format-String für Datumswerte (pandas-Option).
+    overwrite : bool, default False
+        Bei True wird eine existierende Datei überschrieben.
+        Bei False wird automatisch ein numerischer Suffix angehängt (_001, _002, ...).
+
+    Returns
+    -------
+    Path
+        Vollständiger Pfad der erzeugten Datei.
+
+    Raises
+    ------
+    OSError
+        Falls das Schreiben fehlschlägt.
     """
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    target = build_csv_path(prefix=prefix, postfix=postfix, timestamp=timestamp)
 
-    path = build_csv_path(site_url=site_url, list_title=list_title, out_dir=out_dir, timestamp=timestamp)
-    # df wird als pandas-kompatibel angenommen
-    df.to_csv(path, index=index, encoding=encoding, date_format=date_format)
-    return {"path": path, "rows": (0 if getattr(df, "empty", False) else len(df)), "encoding": encoding}
+    # Erzeuge eindeutigen Pfad, falls nicht überschrieben werden soll
+    if target.exists() and not overwrite:
+        target = _next_free_path(target)
+
+    # Sicherstellen, dass Zielordner existiert (i. d. R. cwd, aber robust)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    # Schreiben (pandas-kompatibel)
+    df.to_csv(target, index=index, encoding=encoding, date_format=date_format)
+
+    return target
 
 
-__all__ = ["build_csv_path", "write_csv", "site_token_for_filename"]
+# --------------------------- Hilfsfunktionen (intern) ---------------------------
+
+
+def _next_free_path(path: Path, *, width: int = 3) -> Path:
+    """
+    Liefert einen eindeutigen Pfad, indem ein numerischer Suffix angehängt wird.
+    Beispiel: file.csv -> file_001.csv, file_002.csv, ...
+
+    Parameter
+    ----------
+    path : Path
+        Ausgangspfad.
+    width : int, default 3
+        Breite der führenden Nullen.
+
+    Returns
+    -------
+    Path
+        Nächster nicht existierender Pfad.
+    """
+    stem = path.stem
+    suffix = path.suffix or ".csv"
+    counter = 1
+    while True:
+        candidate = path.with_name(f"{stem}_{counter:0{width}d}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+__all__ = ["build_csv_path", "write_csv"]
