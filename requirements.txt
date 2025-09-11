@@ -1,0 +1,7 @@
+# graphfw – Core runtime (SharePoint, AAD, Teams, Outlook, …)
+# Minimale, stabile Abhängigkeiten für Auth, HTTP und DataFrames.
+
+msal>=1.28,<2          # Auth (Client-Credentials)
+requests>=2.32,<3      # HTTP-Client
+pandas>=2.2,<3         # DataFrame-Ausgaben
+python-dateutil>=2.9   # Datums-/Timezone-Helfer (transitiv in pandas, hier explizit)
