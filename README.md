@@ -236,19 +236,19 @@ print(out)
     [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/002_params_resolver.ipynb)
   * **Writers (CSV/Parquet/SQL) & Namenskonventionen**  
     * csv_writer
-        [`notebooks/031_csv_writer.ipynb`](notebooks/031_csv_writer.ipynb`) ·
+        [`notebooks/031_csv_writer.ipynb`](notebooks/031_csv_writer.ipynb) ·
         [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/031_csv_writer.ipynb)
     * xml_writer
-        [`notebooks/032_xml_writer.ipynb`](notebooks/032_xml_writer.ipynb`) ·
+        [`notebooks/032_xml_writer.ipynb`](notebooks/032_xml_writer.ipynb) ·
         [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/032_xml_writer.ipynb)    
     * json_writer
-        [`notebooks/033_json_writer.ipynb`](notebooks/033_json_writer.ipynb`) ·
+        [`notebooks/033_json_writer.ipynb`](notebooks/033_json_writer.ipynb) ·
         [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/033_json_writer.ipynb)    
     * excel_writer
-        [`notebooks/034_excel_writer.ipynb`](notebooks/034_excel_writer.ipynb`) ·
+        [`notebooks/034_excel_writer.ipynb`](notebooks/034_excel_writer.ipynb) ·
         [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/034_excel_writer.ipynb)    
     * sql_writer
-        [`notebooks/035_sql_writer.ipynb`](notebooks/035_sql_writer.ipynb`) ·
+        [`notebooks/035_sql_writer.ipynb`](notebooks/035_sql_writer.ipynb) ·
         [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/035_sql_writer.ipynb)    
 
 
