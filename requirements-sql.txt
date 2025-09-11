@@ -1,0 +1,9 @@
+# SQL-Writer & DB-Interaktion (optional)
+SQLAlchemy>=2.0,<3
+
+# Treiber je nach Ziel-DB:
+pyodbc>=5.0 ; platform_system == "Windows"   # MS SQL Server via ODBC (Windows)
+# Alternativen (auskommentiert):
+# pymssql>=2.3              # MS SQL (FreeTDS, Linux)
+# psycopg2-binary>=2.9      # PostgreSQL
+# mysqlclient>=2.2          # MySQL/MariaDB
