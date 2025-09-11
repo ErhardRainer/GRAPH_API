@@ -20,7 +20,7 @@ Beispiel:
     params = q.to_params()
     # -> {"$select":"id,displayName", "$expand":"members($select=id,userPrincipalName)", "$filter":"..."}
 
-Autor: dein Projekt
+Autor: Erhard Rainer (www.erhard-rainer.com)
 Version: 1.0.0 (2025-09-11)
 ===============================================================================
 """
