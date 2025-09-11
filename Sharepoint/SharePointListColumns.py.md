@@ -1,4 +1,4 @@
-# SharePointColumns.py – Repository-Dokumentation (v2.1)
+# SharePointListColumns.py – Repository-Dokumentation (v2.1)
 
 [![Download Script](https://img.shields.io/badge/Download-SharePointColumns.py-yellow?logo=python\&logoColor=white)](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointListColumns.py)
 
