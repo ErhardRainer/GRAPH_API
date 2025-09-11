@@ -223,6 +223,7 @@ print(out)
 > **Namenskonvention (CSV):** `Site_ListName_YYYYMMDD_hhmmss.csv` (UTF‑8‑SIG; Excel‑freundlich).
 
 ### 📓 Framework-Notebooks (Erklärungen & Demos)
+* Bei Problemen mit den Notebooks Details siehe hier: [`graphfw\notebook_setup_graphfw.ipynb`](graphfw\notebook_setup_graphfw.ipynb)
 
 * **Überblick & Richtlinien**  
   [`notebooks/framework/000_framework_overview.ipynb`](notebooks/framework/000_framework_overview.ipynb) ·
