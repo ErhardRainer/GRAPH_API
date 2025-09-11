@@ -23,7 +23,7 @@ Wichtig:
     - Standard-Scope ist "https://graph.microsoft.com/.default" (Graph v1.0).
     - Für Delegated- oder OBO-Flows wäre eine Erweiterung nötig; hier Fokus App-Flow.
 
-Autor: dein Projekt
+Autor: Erhard Rainer (www.erhard-rainer.com)
 Version: 1.0.0 (2025-09-11)
 ===============================================================================
 """
