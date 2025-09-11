@@ -309,3 +309,4 @@ Bei „ohne Installation“‑Varianten: Pfadeinträge (`PYTHONPATH`, `.pth`, `s
 
 **Viel Erfolg mit GraphFW!**
 Wenn du eine CI/CD‑ oder Docker‑Integration möchtest, füge die passende Variante (GitHub‑Install oder `--target`) in deine Pipeline ein und pinne auf einen Tag/Commit.
+
