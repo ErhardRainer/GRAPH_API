@@ -13,7 +13,7 @@ Für API‑Aufrufe werden benötigt: **TenantID**, **ApplicationID (ClientID)** 
 
 ## 📚 Hauptbereiche der Graph API
 
-### 🔹 Azure Active Directory (Entra ID)
+### 🔹 01 - Azure Active Directory (Entra ID)
 - Benutzer (Profile, Gruppen, Fotos, Lizenzen)
 - Gruppen (Mitglieder, Besitzer, dynamische Regeln)
 - Rollen und App-Registrierungen
@@ -31,7 +31,7 @@ fertige Lösungen
 - [MonitoringAD](https://github.com/ErhardRainer/MONITORING_AzureActiveDirectory) **planning** - eine gesamt Lösung, die ein AD-Monitoring Dashboard als Ergebnis hat
 ---
 
-### 🔹 SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
+### 🔹 02 - SharePoint & OneDrive (in diesem Abschnitt wird alternativ auch die Verwendung der Sharepoint REST API erklärt)
 
 ➡️[Übersicht der APIs von SharePoint](sharepoint_APIs.ipynb)
 
@@ -53,7 +53,7 @@ fertige Lösungen
 
 ---
 
-### 🔹 Exchange / Outlook
+### 🔹 03 - Exchange / Outlook
 - E-Mails lesen/senden
 - Kalender & Termine
 - Kontakte
@@ -62,7 +62,7 @@ fertige Lösungen
 
 ---
 
-### 🔹 Microsoft Teams
+### 🔹 04 - Microsoft Teams
 - Teams & Channels
 - Mitglieder
 - Chats & Nachrichten
@@ -71,7 +71,7 @@ fertige Lösungen
 
 ---
 
-### 🔹 Intune / Endpoint Management
+### 🔹 05 - Intune / Endpoint Management
 - Geräteinformationen (Compliance, Konfiguration)
 - Apps & Policies
 
@@ -79,7 +79,7 @@ fertige Lösungen
 
 ---
 
-### 🔹 Reports & Analytics
+### 🔹 06 - Reports & Analytics
 - Office 365 Nutzungsstatistiken (Teams, SharePoint, Exchange)
 - Teams User Activity
 
@@ -87,7 +87,7 @@ fertige Lösungen
 
 ---
 
-### 🔹 Planner & To Do
+### 🔹 07 - Planner & To Do
 - Planner: Pläne & Tasks
 - Microsoft To Do: Aufgabenlisten
 
@@ -95,7 +95,7 @@ fertige Lösungen
 
 ---
 
-### 🔹 Security & Compliance
+### 🔹 08 - Security & Compliance
 - Defender Alerts
 - Security Incidents
 
