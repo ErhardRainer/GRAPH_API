@@ -130,7 +130,4 @@ fertige Lösungen
 
 ---
 
-## 🚀 Nächste Schritte
-- [ ] Erste Abfragen mit `requests` und `MSAL` in Python
-- [ ] Notebooks für jeden Bereich ergänzen
-- [ ] Best Practices zu Paging, Delta Queries und Webhooks dokumentieren
+## 🚀 [Changes](https://github.com/ErhardRainer/GRAPH_API/blob/main/CHANGES.md)
