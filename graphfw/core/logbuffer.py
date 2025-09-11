@@ -22,7 +22,7 @@ Beispiel:
     ...
     df_logs = lb.to_df()   # falls pandas vorhanden
 
-Autor: dein Projekt
+Autor: Erhard Rainer (www.erhard-rainer.com)
 Version: 1.0.0 (2025-09-11)
 ===============================================================================
 """
