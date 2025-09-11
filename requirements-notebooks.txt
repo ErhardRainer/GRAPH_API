@@ -1,0 +1,5 @@
+# Notebook-Umgebung für Demos/Docs/Reports
+jupyterlab>=4.2
+ipykernel>=6.29
+nbformat>=5.10
+matplotlib>=3.8        # nur für Visualisierungen in Notebooks
