@@ -4,7 +4,7 @@ Die **Microsoft Graph API** ist die zentrale Schnittstelle zu fast allen Microso
 
 ---
 ## Konfigurationsdatei
-Alle Skripte (nicht die fertigen Lösungen) erfordern eine config.json, um die Passwörter udgl. zu speichern. ➡️ [Notebook: Umgang mit der config.json](config_json.ipynb).
+Alle Skripte (nicht die fertigen Lösungen) erfordern eine config.json, um die Passwörter udgl. zu speichern. ➡️ [Notebook: Umgang mit der config.json](https://github.com/ErhardRainer/GRAPH_API/blob/main/00_General/config_json.ipynb).
 Das ist aber nicht die beste Lösung für den produktiven Einsatz.
 
 ## 🧩 Application (App‑Registrierung)
@@ -38,7 +38,7 @@ fertige Lösungen
 - Sites & Metadaten ➡️[Notebook: SharePoint_Sites Beispiele](sharepoint_Sites.ipynb)
      - SharePoint-Site: Listen, Dokumentenbiblotheken einer SharePoint Seite auslesen [ListSharepointObjects.py](SharePoint\ListSharepointObjects.py)
 - Listen (inkl. Paging) ➡️[Notebook: SharePoint_Lists_ Beispiele](sharepoint_Lists.ipynb)
-     - SharePoint-Liste auslesen und in pandas Dataframe schreiben mittels GraphAPI [SharePointList2DF.py](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointColumns.py.md)
+     - SharePoint-Liste auslesen und in pandas Dataframe schreiben mittels GraphAPI [SharePointList2DF.py](https://github.com/ErhardRainer/GRAPH_API/blob/main/02_Sharepoint/SharePointList2DF.py.md)
      - SharePoint-Liste: alle möglichen Spalten der Graph-API auslesen [SharePointListColumns.py](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointListColumns.py.md)
      - 
 - Libraries (inkl. Paging) ➡️[Notebook: SharePoint_Libraries Beispiele](sharepoint_Libraries.ipynb)
