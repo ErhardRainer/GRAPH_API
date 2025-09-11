@@ -1,0 +1,16 @@
+# Lint/Format
+black>=24.3
+isort>=5.13
+flake8>=7.0
+
+# Typisierung
+mypy>=1.10
+pandas-stubs>=2.2
+types-requests>=2.32
+
+# Tests
+pytest>=8.2
+pytest-cov>=5.0
+
+# Pre-commit Hooks (optional)
+pre-commit>=3.7
