@@ -172,7 +172,6 @@ pip install -e ./graphfw
 ```
 
 Alternative Installationsmethoden: [Installation](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/install.md)
-Installation der Requriements: [Requirements](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/requirements.md)
 
 **B) Direkter Import im Notebook/Script (ohne Installation)**
 
@@ -183,7 +182,7 @@ from core.http import GraphClient
 ```
 
 **Basis‑Abhängigkeiten** (je nach Use‑Case):
-
+Installation der Requriements: [Requirements](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/requirements.md)
 ```bash
 pip install msal requests pandas
 # optional Writer/SQL
