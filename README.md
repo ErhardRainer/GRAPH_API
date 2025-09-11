@@ -1,18 +1,15 @@
-# Microsoft Graph API – Übersicht & Beispiele
+# Microsoft Graph API – Übersicht, Beispiele & Framework
 
-Die **Microsoft Graph API** ist die zentrale Schnittstelle zu fast allen Microsoft-365-Diensten.  
-Damit können Daten aus **Azure Active Directory (Entra ID)**, **SharePoint**, **Teams**, **Outlook**, **Intune** u.v.m. abgerufen, erstellt oder verändert werden.  
-
-Diese Sammlung zeigt eine strukturierte Übersicht der wichtigsten Bereiche mit typischen Endpunkten und wird mit **praktischen Beispielen in Jupyter Notebooks** ergänzt.
+Die **Microsoft Graph API** ist die zentrale Schnittstelle zu fast allen Microsoft‑365‑Diensten (Entra ID/Azure AD, SharePoint, Teams, Outlook/Exchange, Intune u.v.m.). Diese README kombiniert **theoretische Grundlagen**, **Notebook‑Beispiele** und ein **modulares Python‑Framework** zur Wiederverwendung.
 
 ---
 ## Konfigurationsdatei
 Alle Skripte (nicht die fertigen Lösungen) erfordern eine config.json, um die Passwörter udgl. zu speichern. ➡️ [Notebook: Umgang mit der config.json](config_json.ipynb).
 Das ist aber nicht die beste Lösung für den produktiven Einsatz.
 
-## Application
-Jeder der API-Aufrufe benötigt eine **TenantID**, **ApplicationID** (ClientID) und ein **ClientSecret**. 
-➡️ [Notebook: Tests rund um die Application](test_Application.ipynb).
+## 🧩 Application (App‑Registrierung)
+Für API‑Aufrufe werden benötigt: **TenantID**, **ApplicationID (ClientID)** und **ClientSecret** (oder Zertifikat). Außerdem passende **Graph‑Berechtigungen** (Delegated oder Application) mit Admin‑Consent.
+➡️ **Notebook:** [`test_Application.ipynb`](test_Application.ipynb)
 
 ## 📚 Hauptbereiche der Graph API
 
@@ -106,7 +103,7 @@ fertige Lösungen
 
 ---
 
-## 🗂 Übersichtstabelle – Dienste & Endpunkte
+## 🗂 Übersichtstabelle – Dienste & Endpunkte (v1.0)
 
 | Dienst / Bereich         | Typische Endpunkte (v1.0)                                   | Beispiele für Abrufbare Daten |
 |--------------------------|-------------------------------------------------------------|--------------------------------|
@@ -123,11 +120,174 @@ fertige Lösungen
 
 ---
 
-## 🔑 Hinweise zu Berechtigungen
-- **Delegated Permissions** → Zugriff auf eigene Daten (`/me/...`)
-- **Application Permissions** → Zugriff auf Organisationsweite Daten (Admin-Consent notwendig)
-- Typische Scopes: `User.Read.All`, `Sites.Read.All`, `Mail.Read`, `Calendars.Read`
+> Berechtigungen: Delegated vs. Application; typische Scopes u. a. `User.Read.All`, `Sites.Read.All`, `Mail.Read`, `Calendars.Read` (Admin‑Consent bei Application erforderlich).
 
 ---
 
-## 🚀 [Changes](https://github.com/ErhardRainer/GRAPH_API/blob/main/CHANGES.md)
+## 🧱 Graph Framework (Python)
+
+Ein modulares Framework, das Auth, HTTP, Retry, OData, Parameter & Output bündelt. Ziel: **einheitliche Clients** für AAD, SharePoint, Exchange, Teams, Intune, Planner, Analytics – mit wiederverwendbaren Pipelines.
+
+### 🎯 Ziele
+
+* **Einheitlicher Kern** (MSAL‑Auth, HTTP‑Client mit Retry/Throttling/Paging, OData‑Builder)
+* **Domänen‑Clients**: AAD, SharePoint, Exchange, Teams, Intune, Planner, Analytics
+* **Parameter‑Resolver**: CLI/JSON/Config (später SP‑Liste) – schema‑getrieben
+* **Outputs**: Writer‑Adapter (CSV, später Parquet/Excel/SQL)
+* **Diagnose**: konsistente `info`‑Objekte & Log‑Puffer (als DataFrame exportierbar)
+
+### 🧩 Architektur
+
+```
+graphfw/
+  core/
+    auth.py       # MSAL, TokenCache (in-memory/optional persistent)
+    http.py       # GraphClient (Retry 429/5xx, Retry-After, Paging)
+    odata.py      # $select/$expand/$filter/$orderby/$search Builder
+    util.py       # TZ-Policy, GUID-Strip, UTF‑8, SP-Name-Encoding, Masking
+    logbuffer.py  # print + Buffer → .to_df()
+  domains/
+    sp/client.py        # Lists: columns_df(), items_df() …
+    aad/client.py       # Users/Groups/Apps/Logs …
+    exchange/client.py  # Mail/Calendar/Contacts …
+    teams/client.py     # Teams/Channels/Chats …
+    intune/client.py    # Devices/Compliance …
+    planner/client.py   # Plans/Tasks …
+    analytics/client.py # Reports …
+  params/
+    schema.py, resolve.py
+  io/writers/
+    csv_writer.py       # write_csv(), build_csv_path()
+    # parquet_writer.py, excel_writer.py, sql_writer.py (optional)
+```
+
+### ⬇️ Download & Installation
+
+Du kannst Framework & Notebooks **im selben Repo** führen. Zwei Wege zur Einbindung:
+
+**A) Lokal als Paket installieren (empfohlen)**
+
+```bash
+# Im Repo‑Root (enthält graphfw/)
+python -m pip install -U pip
+pip install -e .
+# oder (falls kein pyproject vorhanden):
+pip install -e ./graphfw
+```
+
+Optional mit Extras (später): `pip install -e .[sp,sql]`
+
+**B) Direkter Import im Notebook/Script (ohne Installation)**
+
+```python
+import sys
+sys.path.append("./graphfw")  # relativer Pfad zum Modulordner
+from core.http import GraphClient
+```
+
+**Basis‑Abhängigkeiten** (je nach Use‑Case):
+
+```bash
+pip install msal requests pandas
+# optional Writer/SQL
+pip install sqlalchemy pyodbc openpyxl pyarrow
+```
+
+### ⚡ QuickStart (SharePoint Items → CSV)
+
+```python
+from pathlib import Path
+from graphfw.core.auth import TokenProvider   # liest azuread aus config.json
+from graphfw.core.http import GraphClient
+from graphfw.domains.sp.client import SharePointClient
+from graphfw.io.writers.csv_writer import write_csv
+
+# 1) Auth
+tp = TokenProvider.from_json("config.json")
+client = GraphClient(token_provider=tp)
+
+# 2) Domain-Client
+sp = SharePointClient(client)
+
+# 3) Daten laden
+df, info = sp.get_list_items_df(
+    site_url="https://contoso.sharepoint.com/sites/TeamA",
+    list_title="My Custom List",
+    columns="*",            # oder z. B. ["ID","Title","GUID","createdBy","lastModifiedBy"]
+    filter=None,
+    top=None
+)
+
+# 4) Schreiben
+out = write_csv(df, site_url="https://contoso.sharepoint.com/sites/TeamA",
+                list_title="My Custom List", out_dir=Path("out"))
+print(out)
+```
+
+> **Namenskonvention (CSV):** `Site_ListName_YYYYMMDD_hhmmss.csv` (UTF‑8‑SIG; Excel‑freundlich).
+
+### 📓 Framework-Notebooks (Erklärungen & Demos)
+
+* **Überblick & Richtlinien**  
+  [`notebooks/framework/000_framework_overview.ipynb`](notebooks/framework/000_framework_overview.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/000_framework_overview.ipynb)
+  * **Auth & HTTP (MSAL, Retry, Paging, OData)**  
+    [`notebooks/framework/001_auth_and_http.ipynb`](notebooks/framework/001_auth_and_http.ipynb) ·
+    [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/001_auth_and_http.ipynb)
+  * **Parameter-Resolver (CLI/JSON/Config/SP-Liste)**  
+    [`notebooks/framework/002_params_resolver.ipynb`](notebooks/framework/002_params_resolver.ipynb) ·
+    [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/002_params_resolver.ipynb)
+  * **Writers (CSV/Parquet/SQL) & Namenskonventionen**  
+    [`notebooks/framework/003_writers_csv_sql.ipynb`](notebooks/framework/003_writers_csv_sql.ipynb) ·
+    [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/003_writers_csv_sql.ipynb)
+
+* **SharePoint: Sites, Lists, Libraries …**  
+  [`notebooks/framework/100_sharepoint.ipynb`](notebooks/framework/100_sharepoint.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/100_sharepoint.ipynb)
+  * **SharePoint: Items → DataFrame (`get_list_items_df`)**  
+    [`notebooks/framework/101_sharepoint_lists_items.ipynb`](notebooks/framework/101_sharepoint_lists_items.ipynb) ·
+    [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/101_sharepoint_lists_items.ipynb)
+  * **SharePoint: Columns / Schema-Inspector**  
+    [`notebooks/framework/102_sharepoint_list_columns.ipynb`](notebooks/framework/102_sharepoint_list_columns.ipynb) ·
+    [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/102_sharepoint_list_columns.ipynb)
+
+* **AAD / Entra: Users & Groups**  
+  [`notebooks/framework/200_aad_users_groups.ipynb`](notebooks/framework/200_aad_users_groups.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/200_aad_users_groups.ipynb)
+
+* **Teams: Channels & Messages**  
+  [`notebooks/framework/300_teams_channels_messages.ipynb`](notebooks/framework/300_teams_channels_messages.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/300_teams_channels_messages.ipynb)
+
+* **Exchange: Mail / Calendar**  
+  [`notebooks/framework/400_exchange_mail_calendar.ipynb`](notebooks/framework/400_exchange_mail_calendar.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/400_exchange_mail_calendar.ipynb)
+
+* **Intune: Devices & Compliance**  
+  [`notebooks/framework/500_intune_devices.ipynb`](notebooks/framework/500_intune_devices.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/500_intune_devices.ipynb)
+
+* **Planner: Plans & Tasks**  
+  [`notebooks/framework/600_planner_tasks.ipynb`](notebooks/framework/600_planner_tasks.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/600_planner_tasks.ipynb)
+
+* **Analytics / Reports**  
+  [`notebooks/framework/700_analytics_reports.ipynb`](notebooks/framework/700_analytics_reports.ipynb) ·
+  [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/700_analytics_reports.ipynb)
+
+> Hinweis: In den Demos werden die `graphfw`-Module **verwendet**.
+
+
+---
+
+## 🚀 Changes
+
+Changelog: [`CHANGES.md`](CHANGES.md)
+
+---
+
+### Hinweise zu Berechtigungen & Sicherheit
+
+* **Delegated** (Benutzerkontext) vs. **Application** (App‑Kontext, Org‑weit; Admin‑Consent nötig)
+* Secrets niemals in Logs/Output – für Produktion: Key Vault/Managed Identity
+* Throttling/Retry beachten (HTTP 429/5xx; `Retry‑After` befolgen)
