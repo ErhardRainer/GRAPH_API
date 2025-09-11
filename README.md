@@ -135,7 +135,7 @@ Ein modulares Framework, das Auth, HTTP, Retry, OData, Parameter & Output bünde
 * **Parameter‑Resolver**: CLI/JSON/Config (später SP‑Liste) – schema‑getrieben
 * **Outputs**: Writer‑Adapter (CSV, später Parquet/Excel/SQL)
 * **Diagnose**: konsistente `info`‑Objekte & Log‑Puffer (als DataFrame exportierbar)
-[* **Benennung der Funktionen**:](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/domains/README.md)
+* [**Benennung der Funktionen**:](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/domains/README.md)
 
 ### 🧩 Architektur
 
