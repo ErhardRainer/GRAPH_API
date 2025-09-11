@@ -1,6 +1,6 @@
 # SharePointColumns.py – Repository-Dokumentation (v2.1)
 
-[![Download Script](https://img.shields.io/badge/Download-SharePointColumns.py-yellow?logo=python\&logoColor=white)](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointColumns.py)
+[![Download Script](https://img.shields.io/badge/Download-SharePointColumns.py-yellow?logo=python\&logoColor=white)](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointListColumns.py)
 
 > **Kurzfassung / TL;DR**
 > Dieses Skript liest **Spaltendefinitionen von SharePoint-Listen** (interner Name, Anzeigename, Facet/Typ, Flags) über **Microsoft Graph** aus und liefert ein **pandas DataFrame**. Optional erfolgt ein **CSV‑Export**.
