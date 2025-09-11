@@ -16,7 +16,7 @@ Zweck:
 Abhängigkeiten:
     * Standardbibliothek; pandas optional (für Type-Coercion/DF-Funktionen)
 
-Autor: dein Projekt
+Autor: Erhard Rainer (www.erhard-rainer.com)
 Version: 1.0.0 (2025-09-11)
 ===============================================================================
 """
