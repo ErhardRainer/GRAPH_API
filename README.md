@@ -137,8 +137,6 @@ Ein modulares Framework, das Auth, HTTP, Retry, OData, Parameter & Output bünde
 * **Diagnose**: konsistente `info`‑Objekte & Log‑Puffer (als DataFrame exportierbar)
 * [**Benennung der Funktionen**:](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/domains/README.md)
 
-### [Installation](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/install.md)
-
 ### 🧩 Architektur
 
 ```
@@ -173,7 +171,8 @@ pip install -e .
 pip install -e ./graphfw
 ```
 
-Optional mit Extras (später): `pip install -e .[sp,sql]`
+Alternative Installationsmethoden: [Installation](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/install.md)
+Installation der Requriements: [Requirements](https://github.com/ErhardRainer/GRAPH_API/blob/main/graphfw/requirements.md)
 
 **B) Direkter Import im Notebook/Script (ohne Installation)**
 
