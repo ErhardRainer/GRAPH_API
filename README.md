@@ -235,8 +235,12 @@ print(out)
     [`notebooks/framework/002_params_resolver.ipynb`](notebooks/framework/002_params_resolver.ipynb) ·
     [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/002_params_resolver.ipynb)
   * **Writers (CSV/Parquet/SQL) & Namenskonventionen**  
-    [`notebooks/framework/003_writers_csv_sql.ipynb`](notebooks/framework/003_writers_csv_sql.ipynb) ·
-    [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/framework/003_writers_csv_sql.ipynb)
+    * csv_writer
+        [`notebooks/031_csv_writer.ipynb`](notebooks/031_csv_writer.ipynb`) ·
+        [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/031_csv_writer.ipynb`)
+    * xml_writer
+    * json_writer
+    * excel_writer
 
 * **SharePoint: Sites, Lists, Libraries …**  
   [`notebooks/framework/100_sharepoint.ipynb`](notebooks/framework/100_sharepoint.ipynb) ·
