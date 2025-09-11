@@ -41,8 +41,8 @@ fertige Lösungen
 - Sites & Metadaten ➡️[Notebook: SharePoint_Sites Beispiele](sharepoint_Sites.ipynb)
      - SharePoint-Site: Listen, Dokumentenbiblotheken einer SharePoint Seite auslesen [ListSharepointObjects.py](SharePoint\ListSharepointObjects.py)
 - Listen (inkl. Paging) ➡️[Notebook: SharePoint_Lists_ Beispiele](sharepoint_Lists.ipynb)
-     - SharePoint-Liste auslesen und in pandas Dataframe schreiben mittels GraphAPI [SharePoint2DF.py](SharePoint\Sharepoint2DF.py)
-     - SharePoint-Liste: alle möglichen Spalten der Graph-API auslesen [SharePointColumns.py](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointColumns.py.md)
+     - SharePoint-Liste auslesen und in pandas Dataframe schreiben mittels GraphAPI [SharePointList2DF.py](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointColumns.py.md)
+     - SharePoint-Liste: alle möglichen Spalten der Graph-API auslesen [SharePointListColumns.py](https://github.com/ErhardRainer/GRAPH_API/blob/main/Sharepoint/SharePointListColumns.py.md)
      - 
 - Libraries (inkl. Paging) ➡️[Notebook: SharePoint_Libraries Beispiele](sharepoint_Libraries.ipynb)
 - Dokumente & Dateien (Upload/Download) ➡️[Notebook: SharePoint_Upload/Download Beispiele](sharepoint_UpdloadDownload.ipynb)
