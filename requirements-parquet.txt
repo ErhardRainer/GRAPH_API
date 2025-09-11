@@ -1,0 +1,2 @@
+# Für Parquet/Arrow (optional in io/writers)
+pyarrow>=14,<19
