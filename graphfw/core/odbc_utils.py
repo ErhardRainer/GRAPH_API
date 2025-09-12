@@ -250,10 +250,11 @@ def try_pyodbc_direct(settings, *, driver: Optional[str] = None,
         return False, {"error": "pyodbc not installed"}
     drv = driver or settings.driver or (list_odbc_drivers() or ["ODBC Driver 17 for SQL Server"])[0]
     parts = [
-        f"Driver={{{drv}}}".format(drv=drv),
+        f"Driver={{{drv}}}",                 # <-- .format(...) entfernen!
         f"Server={settings.server}",
         f"Database={settings.db_name}",
     ]
+
     params = settings.params or ""
     # Trusted_Connection erkennen
     if "trusted_connection=yes" in params.lower():
