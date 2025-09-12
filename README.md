@@ -248,8 +248,12 @@ print(out)
         [`notebooks/034_excel_writer.ipynb`](notebooks/034_excel_writer.ipynb) ·
         [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/034_excel_writer.ipynb)    
     * sql_writer
-        [`notebooks/035_sql_writer.ipynb`](notebooks/035_sql_writer.ipynb) ·
-        [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/035_sql_writer.ipynb)    
+        * die unterstützten Authentifizierungsmethoden
+          [`notebooks/035_sql_writer.ipynb`](notebooks/035_sql_writer_auth.ipynb) ·
+          [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/035_sql_writer_auth.ipynb)       
+        * Schreiben eines Dataframes in eine SQL-Datenbank
+          [`notebooks/035_sql_writer.ipynb`](notebooks/035_sql_writer.ipynb) ·
+          [nbviewer](https://nbviewer.org/github/ErhardRainer/GRAPH_API/blob/main/notebooks/035_sql_writer.ipynb)    
 
 
 * **SharePoint: Sites, Lists, Libraries …**  
