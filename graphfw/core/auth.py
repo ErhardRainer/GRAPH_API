@@ -8,29 +8,30 @@ Zweck:
     - Bietet bequeme Fabrikmethoden:
         • from_json / from_dict / from_values (alias: from_client_credentials)
         • from_env (ENV: GRAPH_TENANT_ID / GRAPH_CLIENT_ID / GRAPH_CLIENT_SECRET)
-    - Nutzt einen (optional persistenten) Token-Cache; Wiederverwendung der
-      ConfidentialClientApplication-Instanz zur Reduktion von Roundtrips.
+    - Optional persistenter Token-Cache; Wiederverwendung der MSAL-CCA-Instanz.
 
 Design-Notizen:
     - Geheimnisse werden in __repr__/Fehlern nicht ausgegeben.
     - Standard-Scope ist "https://graph.microsoft.com/.default".
-    - Für Delegated- oder OBO-Flows wäre eine Erweiterung nötig; hier Fokus App-Flow.
+    - Fokus: App-Only (Client Credentials). Delegated/OBO wäre Erweiterung.
 
 Abhängigkeiten:
     pip install msal
 
 Beispiel:
     from graphfw.core.auth import TokenProvider
-    tp = TokenProvider.from_json("config.json")  # erwartet azuread.tenant_id etc.
-    token = tp.get_access_token()                # Standard-Scope (.default)
+    tp = TokenProvider.from_json("config.json")
+    token = tp.get_access_token()  # Standard-Scope (.default)
 
 Autor: Erhard Rainer (www.erhard-rainer.com)
-Version: 1.3.0 (2025-09-12)
+Version: 1.4.1 (2025-09-12)
 
 Änderungsprotokoll
 ------------------
-2025-09-12 - ER - Ergänzt: from_env(); get_access_token/get_token unterstützen optionalen Status-Rückgabemodus (token, succeeded, error_message).
+2025-09-12 - ER - Ergänzt: from_env(); Status-Rückgaben für Fabriken & Token (return_status=True).
 2025-09-12 - ER - Version-Attribut hinzugefügt: TokenProvider.__version__ und Modul-__version__.
+2025-09-12 - ER - Fix: force_refresh wird nicht mehr an MSAL übergeben. Echte Erneuerung
+                       via kurzlebiger cacheloser MSAL-App (kein ValueError mehr).
 ===============================================================================
 """
 from __future__ import annotations
@@ -44,43 +45,27 @@ import threading
 
 import msal
 
-# Modulweite Version (kann separat abgefragt werden: graphfw.core.auth.__version__)
-__version__ = "1.3.0"
+# Modulweite Version
+__version__ = "1.4.1"
 
 _GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default"
 
 
 def _ensure_scopes(scopes: Optional[Union[str, Iterable[str]]]) -> List[str]:
-    """
-    Normalisiert 'scopes' zu einer Liste. Leerer/None-Input → Graph .default.
-    """
     if scopes is None:
         return [_GRAPH_DEFAULT_SCOPE]
     if isinstance(scopes, str):
         scopes = [scopes]
-    # trim + drop empty
     return [s.strip() for s in scopes if str(s).strip()]
 
 
 @dataclass
 class TokenProvider:
     """
-    Dünner Wrapper um MSAL ConfidentialClientApplication (Client-Credentials).
-
-    Cache-Hinweise
-    --------------
-    - MSAL verwaltet einen Token-Cache; wir können optional einen persistenten
-      Cache via 'cache_path' nutzen (SerializableTokenCache).
-    - Prozessweit halten wir _cca (ConfidentialClientApplication) und optional
-      _cache (SerializableTokenCache) und schützen Zugriffe mit einem Lock.
-
-    Thread-Sicherheit
-    -----------------
-    - get_access_token() ist mit einem Lock geschützt, da MSAL bei parallelem
-      Zugriff auf dieselbe CCA-Instanz nicht strikt threadsicher sein muss.
+    Wrapper um MSAL ConfidentialClientApplication (Client-Credentials).
     """
 
-    # Klassenweite Version (abfragbar via TokenProvider.__version__)
+    # Klassenweite Version
     __version__ = __version__
 
     tenant_id: str
@@ -94,39 +79,67 @@ class TokenProvider:
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     # ------------------------------- Fabriken ---------------------------------
+    @overload
+    @classmethod
+    def from_json(cls, config_path: Union[str, Path], section: str = "azuread") -> "TokenProvider": ...
+    @overload
+    @classmethod
+    def from_json(cls, config_path: Union[str, Path], section: str = "azuread",
+                  *, return_status: True) -> Tuple[Optional["TokenProvider"], bool, str]: ...
 
     @classmethod
-    def from_json(cls, config_path: Union[str, Path], section: str = "azuread") -> "TokenProvider":
-        """
-        Lädt azuread-Credentials aus JSON:
+    def from_json(cls, config_path: Union[str, Path], section: str = "azuread",
+                  *, return_status: bool = False):
+        try:
+            path = Path(config_path)
+            if not path.exists():
+                raise FileNotFoundError(f"Config file not found: {path}")
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+            if section not in cfg:
+                raise KeyError(f"Section '{section}' not found in {path}")
+            a = cfg[section]
+            prov = cls.from_dict(a)
+            if return_status:
+                return (prov, True, "")
+            return prov
+        except Exception as ex:
+            if return_status:
+                return (None, False, f"{type(ex).__name__}: {ex}")
+            raise
 
-        {
-          "azuread": {
-             "tenant_id": "...",
-             "client_id": "...",
-             "client_secret": "...",
-             "cache_path": "optional/path/to/cache.bin"
-          }
-        }
-        """
-        path = Path(config_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Config file not found: {path}")
-
-        cfg = json.loads(path.read_text(encoding="utf-8"))
-        if section not in cfg:
-            raise KeyError(f"Section '{section}' not found in {path}")
-        a = cfg[section]
-        return cls.from_dict(a)
+    @overload
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "TokenProvider": ...
+    @overload
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any], *, return_status: True) -> Tuple[Optional["TokenProvider"], bool, str]: ...
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "TokenProvider":
-        return cls.from_values(
-            tenant_id=d["tenant_id"],
-            client_id=d["client_id"],
-            client_secret=d["client_secret"],
-            cache_path=d.get("cache_path"),
-        )
+    def from_dict(cls, d: Dict[str, Any], *, return_status: bool = False):
+        try:
+            prov = cls.from_values(
+                tenant_id=d["tenant_id"],
+                client_id=d["client_id"],
+                client_secret=d["client_secret"],
+                cache_path=d.get("cache_path"),
+            )
+            if return_status:
+                return (prov, True, "")
+            return prov
+        except Exception as ex:
+            if return_status:
+                return (None, False, f"{type(ex).__name__}: {ex}")
+            raise
+
+    @overload
+    @classmethod
+    def from_values(cls, tenant_id: str, client_id: str, client_secret: str,
+                    cache_path: Optional[Union[str, Path]] = None) -> "TokenProvider": ...
+    @overload
+    @classmethod
+    def from_values(cls, tenant_id: str, client_id: str, client_secret: str,
+                    cache_path: Optional[Union[str, Path]] = None, *,
+                    return_status: True) -> Tuple[Optional["TokenProvider"], bool, str]: ...
 
     @classmethod
     def from_values(
@@ -135,52 +148,74 @@ class TokenProvider:
         client_id: str,
         client_secret: str,
         cache_path: Optional[Union[str, Path]] = None,
-    ) -> "TokenProvider":
-        """
-        Direkte Initialisierung aus Einzelwerten.
-        """
-        return cls(
-            tenant_id=str(tenant_id).strip(),
-            client_id=str(client_id).strip(),
-            client_secret=str(client_secret).strip(),
-            cache_path=Path(cache_path) if cache_path else None,
-        )
+        *,
+        return_status: bool = False,
+    ):
+        try:
+            prov = cls(
+                tenant_id=str(tenant_id).strip(),
+                client_id=str(client_id).strip(),
+                client_secret=str(client_secret).strip(),
+                cache_path=Path(cache_path) if cache_path else None,
+            )
+            if return_status:
+                return (prov, True, "")
+            return prov
+        except Exception as ex:
+            if return_status:
+                return (None, False, f"{type(ex).__name__}: {ex}")
+            raise
 
-    # Alias passend zur früheren API
+    @overload
     @classmethod
     def from_client_credentials(cls, tenant_id: str, client_id: str, client_secret: str,
-                                cache_path: Optional[Union[str, Path]] = None) -> "TokenProvider":
-        return cls.from_values(tenant_id, client_id, client_secret, cache_path)
+                                cache_path: Optional[Union[str, Path]] = None) -> "TokenProvider": ...
+    @overload
+    @classmethod
+    def from_client_credentials(cls, tenant_id: str, client_id: str, client_secret: str,
+                                cache_path: Optional[Union[str, Path]] = None, *,
+                                return_status: True) -> Tuple[Optional["TokenProvider"], bool, str]: ...
 
     @classmethod
-    def from_env(cls, prefix: str = "GRAPH_", *, cache_path: Optional[Union[str, Path]] = None) -> "TokenProvider":
-        """
-        Erwartete Variablen:
-        - GRAPH_TENANT_ID
-        - GRAPH_CLIENT_ID
-        - GRAPH_CLIENT_SECRET
-        Optional: cache_path (Argument)
-        """
-        tid = os.getenv(f"{prefix}TENANT_ID", "").strip()
-        cid = os.getenv(f"{prefix}CLIENT_ID", "").strip()
-        sec = os.getenv(f"{prefix}CLIENT_SECRET", "")
-        if not (tid and cid and sec):
-            raise ValueError(f"Environment variables {prefix}TENANT_ID/_CLIENT_ID/_CLIENT_SECRET required.")
-        return cls.from_values(tid, cid, sec, cache_path=cache_path)
+    def from_client_credentials(cls, tenant_id: str, client_id: str, client_secret: str,
+                                cache_path: Optional[Union[str, Path]] = None, *,
+                                return_status: bool = False):
+        return cls.from_values(tenant_id, client_id, client_secret, cache_path, return_status=return_status)
+
+    @overload
+    @classmethod
+    def from_env(cls, prefix: str = "GRAPH_", *, cache_path: Optional[Union[str, Path]] = None) -> "TokenProvider": ...
+    @overload
+    @classmethod
+    def from_env(cls, prefix: str = "GRAPH_", *, cache_path: Optional[Union[str, Path]] = None,
+                 return_status: True) -> Tuple[Optional["TokenProvider"], bool, str]: ...
+
+    @classmethod
+    def from_env(cls, prefix: str = "GRAPH_", *, cache_path: Optional[Union[str, Path]] = None,
+                 return_status: bool = False):
+        try:
+            tid = os.getenv(f"{prefix}TENANT_ID", "").strip()
+            cid = os.getenv(f"{prefix}CLIENT_ID", "").strip()
+            sec = os.getenv(f"{prefix}CLIENT_SECRET", "")
+            if not (tid and cid and sec):
+                raise ValueError(f"Environment variables {prefix}TENANT_ID/_CLIENT_ID/_CLIENT_SECRET required.")
+            prov = cls.from_values(tid, cid, sec, cache_path=cache_path)
+            if return_status:
+                return (prov, True, "")
+            return prov
+        except Exception as ex:
+            if return_status:
+                return (None, False, f"{type(ex).__name__}: {ex}")
+            raise
 
     # --------------------------------- Utils ----------------------------------
-
     @property
     def authority(self) -> str:
-        """Komplette Authority-URL inkl. Tenant-ID."""
         return f"{self.authority_base.rstrip('/')}/{self.tenant_id}"
 
     def _ensure_app(self) -> None:
-        """Initialisiert Cache und ConfidentialClientApplication (einmalig)."""
         if self._cca is not None:
             return
-
-        # Optional: persistenten Cache laden
         cache = None
         if self.cache_path:
             cache = msal.SerializableTokenCache()
@@ -189,10 +224,8 @@ class TokenProvider:
                 if p.exists():
                     cache.deserialize(p.read_text())
             except Exception:
-                # Cache nicht lesbar => ignorieren (neu beginnen)
                 cache = msal.SerializableTokenCache()
         self._cache = cache
-
         self._cca = msal.ConfidentialClientApplication(
             client_id=self.client_id,
             authority=self.authority,
@@ -201,7 +234,6 @@ class TokenProvider:
         )
 
     def _persist_cache_if_needed(self) -> None:
-        """Schreibt den Cache zurück, falls geändert und cache_path gesetzt."""
         if self._cache is None or not self.cache_path:
             return
         try:
@@ -210,11 +242,19 @@ class TokenProvider:
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(self._cache.serialize())
         except Exception:
-            # Cache-Fehler sind nicht kritisch für die Laufzeit.
             pass
 
-    # ------------------------------ Hauptmethoden -----------------------------
-    # Overloads: wahlweise str oder Tuple[str, bool, str] zurückgeben
+    # ------------------------------ Token-Methoden -----------------------------
+    def _acquire_token_cacheless(self, scopes: List[str]) -> Dict[str, Any]:
+        """Erzwingt einen neuen Token, indem eine MSAL-CCA ohne Cache verwendet wird."""
+        tmp_app = msal.ConfidentialClientApplication(
+            client_id=self.client_id,
+            authority=self.authority,
+            client_credential=self.client_secret,
+            token_cache=None,  # kritisch: kein Cache -> kein force_refresh nötig
+        )
+        return tmp_app.acquire_token_for_client(scopes=scopes)
+
     @overload
     def get_access_token(
         self,
@@ -242,29 +282,21 @@ class TokenProvider:
         """
         Holt ein Access Token (Client Credentials Flow).
 
-        Parameter:
-            scopes: Liste oder String (Default: Graph .default)
-            force_refresh: Wenn True, erzwingt neuen Erwerb (umgeht Cache).
-            return_status: Wenn True, wird `(token, succeeded, error_message)` zurückgegeben
-                           statt nur `token`. Bei Erfolg: succeeded=True, error_message="".
-
-        Rückgabe:
-            - Standard: Bearer Access Token (str)
-            - Mit return_status=True: Tuple[str token_or_empty, bool succeeded, str error_message]
-
-        Raises:
-            RuntimeError bei Fehlern (nur im Standardmodus ohne return_status=True)
+        - force_refresh=True: Cache wird umgangen (cachelose CCA).
+        - return_status=True: gibt (token|"" , succeeded: bool, error_message: str) zurück.
         """
         scopes = _ensure_scopes(scopes)
         try:
-            with self._lock:
-                self._ensure_app()
-                result = self._cca.acquire_token_for_client(
-                    scopes=scopes, force_refresh=bool(force_refresh)
-                )
-                self._persist_cache_if_needed()
+            if force_refresh:
+                result = self._acquire_token_cacheless(scopes)
+            else:
+                with self._lock:
+                    self._ensure_app()
+                    # ACHTUNG: kein force_refresh-Parameter hier!
+                    result = self._cca.acquire_token_for_client(scopes=scopes)
+                    self._persist_cache_if_needed()
+
             if "access_token" not in result:
-                # Nur sichere Felder durchreichen
                 err = {
                     "error": result.get("error"),
                     "error_description": result.get("error_description"),
@@ -275,29 +307,21 @@ class TokenProvider:
                 raise RuntimeError(f"Token acquisition failed: {err}")
 
             token = str(result["access_token"])
-            if return_status:
-                return (token, True, "")
-            return token
+            return (token, True, "") if return_status else token
 
         except Exception as ex:
-            # Fehlerpfad nur für return_status=True abfangen; ansonsten erneut werfen
             if return_status:
                 return ("", False, f"{type(ex).__name__}: {ex}")
             raise
 
-    # Bequemer Alias auf das modernere Naming in unserer Codebase
     @overload
     def get_token(self, scopes: Optional[Union[str, Iterable[str]]] = None, *, return_status: False = False) -> str: ...
     @overload
     def get_token(self, scopes: Optional[Union[str, Iterable[str]]] = None, *, return_status: True = True) -> Tuple[str, bool, str]: ...
     def get_token(self, scopes: Optional[Union[str, Iterable[str]]] = None, *, return_status: bool = False):
-        """
-        Alias für get_access_token(scopes). Unterstützt denselben Status-Rückgabemodus.
-        """
         return self.get_access_token(scopes=scopes, return_status=return_status)
 
     # --------------------------------- Repr -----------------------------------
-
     def __repr__(self) -> str:
         sid = (self.client_id[:6] + "…") if self.client_id else "?"
         return f"TokenProvider(tenant_id='{self.tenant_id}', client_id='{sid}', cache_path={self.cache_path})"
