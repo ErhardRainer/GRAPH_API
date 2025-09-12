@@ -1,3 +1,108 @@
+# -*- coding: utf-8 -*-
+"""
+===============================================================================
+graphfw.params.sql_connection_check
+===============================================================================
+Autor: Erhard Rainer (ER)
+Lizenz: MIT (sofern im Projekt nicht anders geregelt)
+
+Zweck
+-----
+Diagnose- und Hilfsmodul für SQL-Verbindungsparameter in `config.json`.
+Das Modul liest bestehende Einstellungen (inkl. optionaler ENV-Overrides),
+führt eine Konnektivitätsdiagnose via `graphfw.core.odbc_utils` durch, leitet
+daraus einen belastbaren Konfigurationskandidaten ab und kann diesen wahlweise:
+
+  1) als JSON-Block ausgeben (zum Copy/Paste), oder
+  2) **atomar** in die echte `config.json` schreiben (mit Backup, Dry-Run und
+     sicherem Passwort-Handling).
+
+Spezifische Unterstützung für dein JSON-Schema
+----------------------------------------------
+Pro Node werden u. a. diese Felder unterstützt:
+
+    {
+      "server": "myserver.domain.tld",
+      "db_name": "BI_RAW",
+      "username": "svc_user",
+      "password": "CHANGE_ME",
+      "driver": "ODBC Driver 18 for SQL Server",
+      "auth": "sql" | "trusted" | "aad-password" | "aad-integrated"
+              | "aad-interactive" | "aad-msi" | "aad-sp",
+      "params": { ... }   # Dict, z.B. {"TrustServerCertificate": "yes", "Encrypt": "yes"}
+    }
+
+- `auth` wird beibehalten und in die Diagnose übersetzt (Trusted Connection etc.).
+- `params` wird als **Dict** gelesen; für die Diagnose wird ein **ODBC-Query-String**
+  erzeugt (z. B. `Encrypt=yes&TrustServerCertificate=yes`).
+
+Sicherheitsprinzipien
+---------------------
+- **Keine Geheimnisse im Log**: Passwörter werden nie im Klartext ausgegeben;
+  bei Vorschlägen wird der Platzhalter `<<<SET_SECRET_HERE>>>` gesetzt.
+- **Passwort-Erhalt**: Beim Schreiben kann ein bestehendes Passwort beibehalten
+  werden (`keep_existing_password=True`), wenn der neue Kandidat nur den
+  Platzhalter liefert.
+- **Atomare Writes**: Updates werden über eine temporäre Datei und `os.replace`
+  durchgeführt; optional wird vorab ein Backup angelegt.
+
+Öffentliche API
+---------------
+- `connect_and_check(node, *, show_drivers=True, show_dsns=True, return_config_json=True,
+                     write_config=False, config_path=CONFIG_PATH, keep_existing_password=True,
+                     dry_run=False) -> (ok: bool, diag: dict, config_json: str|None, write_info: dict|None)`
+
+- `build_config_candidate(settings, diag) -> dict`
+- `render_config_json(node, entry) -> str`
+- `apply_config_update(*, config_path, node, new_entry, create_backup=True,
+                       keep_existing_password=True, dry_run=False) -> dict`
+- `quick_check(engine) -> Any` (optional, erfordert SQLAlchemy)
+- `show_settings(settings) -> None` (maskierte Kurzansicht)
+
+Fehlerklassen
+-------------
+- `ConfigUpdateError`: Les-/Schreib-/Merge-Fehler für `config.json`.
+
+ENV-Overrides (Fallback-Loader)
+-------------------------------
+Falls das Projekt keinen eigenen Loader bereitstellt, werden u. a. diese
+Umgebungsvariablen berücksichtigt (best effort):
+  SQL_SERVER, DB_SERVER
+  SQL_DATABASE, DB_NAME, DATABASE
+  SQL_USERNAME, DB_USER, USER
+  SQL_PASSWORD, DB_PASSWORD, PASSWORD
+  SQL_DRIVER, ODBC_DRIVER
+  SQL_DSN, ODBC_DSN
+  SQL_AUTH    (sql|trusted|aad-password|aad-integrated|aad-interactive|aad-msi|aad-sp)
+  SQL_TRUSTED_CONNECTION (1/true/yes)
+  SQL_ENCRYPT (1/true/yes)
+  SQL_PARAMS_JSON  (ganzer params-Dict als JSON-String)
+
+Änderungsprotokoll (Change Log)
+-------------------------------
+2025-09-12 (ER)
+  - **Integration `graphfw.core.odbc_utils`**: Diagnose, Treiber- und DSN-Auflistung
+    laufen jetzt über das zentrale Modul (`diagnose_with_fallbacks`,
+    `list_odbc_drivers`, `list_odbc_data_sources`).
+  - Settings-Adapter eingeführt, der `auth`/`params` (Dict) in das von
+    `odbc_utils` erwartete Attr-Format (inkl. `params`-Querystring) überführt.
+  - Bestehende API, Sicherheits- und Schreiblogik unverändert beibehalten.
+
+2025-09-12 (ER)
+  - Anpassung an das JSON-Schema (auth/params als Dict), erweiterte Validierung.
+  - Robuste Loader-Fallbacks, atomare Writes/Backup, Secret-Erhalt.
+
+2025-09-11 (ER)
+  - `build_config_candidate(...)`: deterministische Schlüsselreihenfolge; Passwort-
+    Platzhalter nur bei nicht-Trusted-Connection.
+
+2025-09-10 (ER)
+  - Erste Version: Diagnose-Orchestrierung, JSON-Vorschlag, `quick_check(...)`,
+    `show_settings(...)`.
+
+===============================================================================
+"""
+
 from __future__ import annotations
 
 import json
@@ -5,40 +110,153 @@ import os
 import shutil
 import tempfile
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import text  # type: ignore
-
-# Projekt-Utilities (existieren laut Repo-Beschreibung)
-from graphfw.params.resolve import load_sql_settings
-from graphfw.core.util import list_odbc_drivers, list_odbc_data_sources  # Anzeige, keine harte Abhängigkeit
-
-# Konstante: Pfad zur bestehenden Konfiguration
+# Optional: nur für quick_check; kann entfernt werden wenn nicht genutzt
 try:
-    from graphfw.params.resolve import CONFIG_PATH  # bevorzugte Quelle
+    from sqlalchemy import text  # type: ignore
+except Exception:  # pragma: no cover
+    text = None  # type: ignore
+
+# Zentrale ODBC-Diagnose & Utilities
+from graphfw.core import odbc_utils  # nutzt: list_odbc_drivers, list_odbc_data_sources, diagnose_with_fallbacks
+
+# =========================
+#   Kompatibler Settings-Loader
+# =========================
+_LOAD_SQL_SETTINGS = None
+_LOAD_SETTINGS_GENERIC = None
+_CONFIG_PATH_FROM_RESOLVE = None
+try:
+    from graphfw.params.resolve import load_sql_settings as _LOAD_SQL_SETTINGS  # type: ignore
 except Exception:
-    CONFIG_PATH = "config.json"
+    pass
+
+try:
+    from graphfw.params.resolve import load_settings as _LOAD_SETTINGS_GENERIC  # type: ignore
+except Exception:
+    pass
+
+try:
+    from graphfw.params.resolve import CONFIG_PATH as _CONFIG_PATH_FROM_RESOLVE  # type: ignore
+except Exception:
+    pass
+
+CONFIG_PATH = (
+    _CONFIG_PATH_FROM_RESOLVE
+    if _CONFIG_PATH_FROM_RESOLVE
+    else os.environ.get("GRAPHFW_CONFIG_PATH", "config.json")
+)
+
+
+class _SimpleSettings:
+    """Minimaler Settings-Wrapper mit as_dict(mask_secrets=...) kompatibel zur bisherigen Nutzung."""
+    def __init__(self, data: Dict[str, Any]) -> None:
+        self._data = dict(data or {})
+
+    def as_dict(self, *, mask_secrets: bool = True) -> Dict[str, Any]:
+        d = dict(self._data)
+        if mask_secrets:
+            for k in ("password", "pwd", "secret"):
+                if k in d and isinstance(d[k], str) and d[k]:
+                    d[k] = "******"
+        return d
+
+
+def _split_node_path(node_path: str) -> List[str]:
+    return [p for p in (node_path or "").split(".") if p]
+
+
+def _simple_load_sql_settings(config_path: str, node: str, env_override: bool = True) -> Tuple[_SimpleSettings, Dict[str, Any]]:
+    """
+    Sehr einfacher Loader: liest JSON, nimmt root['sql'][*node_parts*] und packt es in _SimpleSettings.
+    env_override=True: überschreibt mit ENV-Variablen (z. B. SQL_*), inkl. SQL_AUTH und SQL_PARAMS_JSON.
+    """
+    info: Dict[str, Any] = {"source": os.path.abspath(config_path), "node_path": f"sql.{node}"}
+    if not os.path.exists(config_path):
+        data = {}
+    else:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+    cur: Any = data.get("sql", {})
+    for part in _split_node_path(node):
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            cur = {}
+            break
+
+    if not isinstance(cur, dict):
+        cur = {}
+
+    # ENV-Overrides (best-effort)
+    if env_override:
+        env_map = {
+            "server": ["SQL_SERVER", "DB_SERVER"],
+            "db_name": ["SQL_DATABASE", "DB_NAME", "DATABASE"],
+            "username": ["SQL_USERNAME", "DB_USER", "USER"],
+            "password": ["SQL_PASSWORD", "DB_PASSWORD", "PASSWORD"],
+            "driver": ["SQL_DRIVER", "ODBC_DRIVER"],
+            "dsn": ["SQL_DSN", "ODBC_DSN"],  # falls DSN genutzt wird
+            "auth": ["SQL_AUTH"],
+            "trusted_connection": ["SQL_TRUSTED_CONNECTION"],
+            "encrypt": ["SQL_ENCRYPT"],  # nur zur Kompatibilität; eigentl. in params
+        }
+        for key, env_keys in env_map.items():
+            for ek in env_keys:
+                if ek in os.environ and os.environ[ek] != "":
+                    val: Any = os.environ[ek]
+                    if key in ("trusted_connection", "encrypt"):
+                        val = str(val).lower() in ("1", "true", "yes", "y")
+                    cur[key] = val
+                    break
+        # params als JSON-Dict erlauben
+        params_json = os.environ.get("SQL_PARAMS_JSON")
+        if params_json:
+            try:
+                cur["params"] = json.loads(params_json)
+            except Exception:
+                pass
+
+    return _SimpleSettings(cur), info
+
+
+def load_sql_settings(config_path: str, node: str, env_override: bool = True):
+    """
+    Kompatibler Entry-Point: nutzt (in dieser Reihenfolge)
+    - graphfw.params.resolve.load_sql_settings
+    - graphfw.params.resolve.load_settings(section='sql')
+    - _simple_load_sql_settings (dieses Modul)
+    """
+    if callable(_LOAD_SQL_SETTINGS):
+        return _LOAD_SQL_SETTINGS(config_path=config_path, node=node, env_override=env_override)  # type: ignore
+    if callable(_LOAD_SETTINGS_GENERIC):
+        return _LOAD_SETTINGS_GENERIC(config_path=config_path, node=node, env_override=env_override, section="sql")  # type: ignore
+    return _simple_load_sql_settings(config_path=config_path, node=node, env_override=env_override)
 
 
 # =========================
-#   Mini-Diagnose Helpers
+#   Diagnose + Kandidat bauen
 # =========================
 
 def quick_check(engine) -> Any:
-    """Führt SELECT 1 aus und gibt das Ergebnis zurück."""
+    """Führt SELECT 1 aus und gibt das Ergebnis zurück (nur mit SQLAlchemy verfügbar)."""
+    if text is None:
+        raise RuntimeError("SQLAlchemy nicht verfügbar – quick_check kann nicht ausgeführt werden.")
     with engine.connect() as c:
         return c.execute(text("SELECT 1")).scalar()
 
 
 def show_settings(settings) -> None:
-    """Gibt zentrale Settings ohne Secrets aus (kompakt)."""
+    """Kompakte, maskierte Ausgabe gängiger Felder."""
     d = settings.as_dict(mask_secrets=True)
-    keys = ("server", "db_name", "username", "driver", "dsn", "params")
+    keys = ("server", "db_name", "username", "driver", "dsn", "auth", "params")
     print({k: d[k] for k in keys if k in d})
 
 
 def _first_ok_attempt(diag: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Erstes erfolgreiches Attempt aus der Diagnose finden."""
     for att in diag.get("attempts", []):
         if att.get("ok"):
             return att
@@ -46,41 +264,100 @@ def _first_ok_attempt(diag: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _normalize_settings_dict(settings) -> Dict[str, Any]:
-    """
-    Konvertiert Settings-Objekt in Dict (ohne Secrets, mit Standardfeldern).
-    Zielt auf ein kompaktes, stabiles Set von Schlüsseln für config.json.
-    """
     d = settings.as_dict(mask_secrets=False) if hasattr(settings, "as_dict") else dict(settings or {})
     norm = {
         "server": d.get("server") or d.get("host") or d.get("hostname"),
         "db_name": d.get("db_name") or d.get("database") or d.get("db"),
         "username": d.get("username") or d.get("user") or d.get("uid"),
+        "password": d.get("password") or d.get("pwd"),
         "driver": d.get("driver") or d.get("provider"),
         "dsn": d.get("dsn"),
+        "auth": d.get("auth"),
         "trusted_connection": d.get("trusted_connection"),
-        "encrypt": d.get("encrypt"),
+        "encrypt": d.get("encrypt"),  # meist in params geführt
         "params": d.get("params") or d.get("options"),
     }
-    return {k: v for k, v in norm.items() if v not in (None, "")}
+    # Nur nicht-leere Werte
+    out = {k: v for k, v in norm.items() if v not in (None, "")}
+    # Stelle sicher: params ist ein Dict (wenn vorhanden)
+    if "params" in out and not isinstance(out["params"], dict):
+        out["params"] = {"Raw": out["params"]}
+    return out
+
+
+def _dict_params_to_query(params: Optional[Dict[str, Any]]) -> str:
+    """params-Dict -> ODBC-Querystring (k=v&...). Werte werden str()-konvertiert."""
+    if not params:
+        return ""
+    parts = []
+    for k, v in params.items():
+        if v is None:
+            continue
+        parts.append(f"{k}={v}")
+    return "&".join(parts)
+
+
+def _adapt_for_odbc_utils(settings) -> SimpleNamespace:
+    """
+    Baut ein Objekt mit Attributzugriff, wie es `core.odbc_utils` erwartet.
+    - params wird als Querystring bereitgestellt (nicht Dict).
+    - Trusted_Connection wird aus `auth`/'trusted_connection'/'params' heuristisch abgeleitet.
+    """
+    d = _normalize_settings_dict(settings)
+
+    # params: Dict -> Querystring
+    params_qs = _dict_params_to_query(d.get("params"))
+    auth = str(d.get("auth") or "").lower()
+
+    # Trusted_Connection Heuristik
+    tc_flag = bool(d.get("trusted_connection"))
+    if not tc_flag and auth == "trusted":
+        tc_flag = True
+    if tc_flag and "TrustedServerCertificate" not in params_qs and "Trusted_Connection" not in params_qs:
+        # sicherstellen, dass die Info in params landet (odbc_utils prüft params.lower())
+        add = "Trusted_Connection=yes"
+        params_qs = (params_qs + "&" + add) if params_qs else add
+
+    return SimpleNamespace(
+        server=d.get("server"),
+        db_name=d.get("db_name"),
+        username=d.get("username"),
+        password=d.get("password"),
+        driver=d.get("driver"),
+        dsn=d.get("dsn"),
+        auth=d.get("auth"),
+        params=params_qs,
+        trusted_connection=tc_flag,
+        encrypt=d.get("encrypt"),
+    )
 
 
 def _extract_from_attempt(att: Dict[str, Any]) -> Dict[str, Any]:
-    """Feldwerte aus einem Diagnose-Attempt ableiten (best-effort)."""
     candidates = {
         "driver": att.get("driver") or att.get("provider"),
         "dsn": att.get("dsn"),
         "server": att.get("server") or att.get("host"),
         "db_name": att.get("database") or att.get("db"),
         "username": att.get("username") or att.get("user"),
+        "auth": att.get("auth"),
         "trusted_connection": att.get("trusted_connection"),
         "encrypt": att.get("encrypt"),
         "params": att.get("params"),
     }
+    # params im Attempt kann auch String sein -> in Dict heben (best-effort)
+    if isinstance(candidates.get("params"), str):
+        raw = candidates["params"]
+        d: Dict[str, str] = {}
+        for piece in raw.split("&"):
+            if not piece or "=" not in piece:
+                continue
+            k, v = piece.split("=", 1)
+            d[k] = v
+        candidates["params"] = d
     return {k: v for k, v in candidates.items() if v not in (None, "")}
 
 
 def _merge_preferring_left(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-    """Merge zweier Dicts: Werte aus a haben Vorrang, b füllt Lücken."""
     out = dict(a)
     for k, v in b.items():
         if k not in out or out[k] in (None, ""):
@@ -88,12 +365,18 @@ def _merge_preferring_left(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, An
     return out
 
 
+def _infer_auth_from_flags(d: Dict[str, Any]) -> Optional[str]:
+    if d.get("trusted_connection") is True:
+        return "trusted"
+    if d.get("username") and d.get("password"):
+        return d.get("auth") or "sql"
+    return d.get("auth")
+
+
 def build_config_candidate(settings, diag: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Erzeugt einen sinnvollen config.json-Eintrag auf Basis der Settings + Diagnose.
-    - Bevorzugt den ersten erfolgreichen Attempt.
-    - Gibt niemals Password aus (nur Platzhalter).
-    - DSN-basiert, wenn möglich; sonst explizite Felder.
+    Baut einen Kandidaten entsprechend deinem Schema (inkl. 'auth' und params als Dict).
+    Gibt **keine** echten Passwörter aus – Platzhalter wenn nötig.
     """
     base = _normalize_settings_dict(settings)
     best = _first_ok_attempt(diag)
@@ -101,52 +384,43 @@ def build_config_candidate(settings, diag: Dict[str, Any]) -> Dict[str, Any]:
     merged = _merge_preferring_left(from_attempt, base)
 
     has_dsn = bool(merged.get("dsn"))
-
     config_entry: Dict[str, Any] = {}
+
     if has_dsn:
         config_entry["dsn"] = merged["dsn"]
-        for opt in ("trusted_connection", "encrypt"):
-            if opt in merged:
-                config_entry[opt] = merged[opt]
-        if "params" in merged:
-            config_entry["params"] = merged["params"]
-    else:
-        for key in ("driver", "server", "db_name", "username"):
-            if key in merged:
-                config_entry[key] = merged[key]
-        for opt in ("trusted_connection", "encrypt"):
-            if opt in merged:
-                config_entry[opt] = merged[opt]
-        if "params" in merged:
-            config_entry["params"] = merged["params"]
 
-    # Passwort nur als Platzhalter setzen, wenn nicht Trusted_Connection
-    if not config_entry.get("trusted_connection", False):
+    for key in ("driver", "server", "db_name", "username", "auth", "trusted_connection"):
+        if key in merged:
+            config_entry[key] = merged[key]
+
+    if "params" in merged and isinstance(merged["params"], dict):
+        config_entry["params"] = merged["params"]
+
+    if "auth" not in config_entry or not config_entry["auth"]:
+        inferred = _infer_auth_from_flags(merged)
+        if inferred:
+            config_entry["auth"] = inferred
+
+    auth = str(config_entry.get("auth") or "").lower()
+    needs_password = auth in ("sql", "aad-password", "aad-sp")
+    if needs_password and not config_entry.get("trusted_connection", False):
         config_entry["password"] = "<<<SET_SECRET_HERE>>>"
 
     ordered_keys: List[str] = [
         "dsn", "driver", "server", "db_name", "username", "password",
-        "trusted_connection", "encrypt", "params",
+        "auth", "trusted_connection", "params",
     ]
     config_entry = {k: config_entry[k] for k in ordered_keys if k in config_entry}
     return config_entry
 
 
 def render_config_json(node: str, entry: Dict[str, Any]) -> str:
-    """
-    JSON-Block für die config.json erzeugen:
-    {
-      "sql": {
-        "<node>": { ... }
-      }
-    }
-    """
     payload = {"sql": {node: entry}}
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 # =====================================
-#   NEU: Config tatsächlich aktualisieren
+#   Config schreiben (atomar)
 # =====================================
 
 class ConfigUpdateError(RuntimeError):
@@ -174,7 +448,6 @@ def _save_json_atomic(path: str, data: Dict[str, Any]) -> None:
             f.write("\n")
         os.replace(tmp_path, path)  # atomic on same filesystem
     except OSError as ex:
-        # Cleanup tmpfile if replace failed
         try:
             os.remove(tmp_path)
         except OSError:
@@ -183,32 +456,27 @@ def _save_json_atomic(path: str, data: Dict[str, Any]) -> None:
 
 
 def _mask_password(v: Any) -> Any:
-    if isinstance(v, str) and v and len(v) > 0:
+    if isinstance(v, str) and v:
         return "******"
     return v
 
 
 def _validate_entry(entry: Dict[str, Any]) -> None:
     """
-    Validiert minimale Struktur:
-    - Entweder DSN ODER (driver + server + db_name) vorhanden.
-    - username empfehlenswert bei SQL-Auth (wenn trusted_connection=False).
-    - password darf fehlen (z. B. ENV/Secrets), darf aber nicht versehentlich leerer String sein.
+    Basale Validierung je nach 'auth'.
     """
     if "dsn" in entry and entry["dsn"]:
-        pass  # ok (DSN deckt Details ab)
+        pass
     else:
         need = [k for k in ("driver", "server", "db_name") if not entry.get(k)]
         if need:
             raise ConfigUpdateError(f"Ungültiger SQL-Eintrag: fehlende Felder {need}. "
                                     f"Erforderlich: DSN ODER (driver, server, db_name).")
-    if entry.get("trusted_connection") is False:
-        # SQL-Auth: username empfohlen
-        if not entry.get("username"):
-            # kein harter Fehler – warnen durch Exception-Message? wir lassen zu, aber Hinweis im Info-Objekt
-            pass
-        if "password" in entry and entry.get("password") == "":
-            raise ConfigUpdateError("Password ist leerer String. Entfernen oder Placeholder/Secret verwenden.")
+
+    auth = str(entry.get("auth") or "").lower()
+    if auth in ("sql", "aad-password", "aad-sp"):
+        if entry.get("password", None) == "":
+            raise ConfigUpdateError("Password ist leerer String. Entfernen oder Platzhalter/Secret verwenden.")
 
 
 def apply_config_update(
@@ -222,55 +490,19 @@ def apply_config_update(
 ) -> Dict[str, Any]:
     """
     Schreibt/merged den SQL-Block in die echte config.json.
-
-    Regeln
-    ------
-    - Struktur unter `"sql"` wird angelegt, falls nicht vorhanden.
-    - Update nur für den spezifizierten `node`.
-    - Wenn `keep_existing_password=True` und `new_entry.password` ist ein Platzhalter
-      oder fehlt, wird ein vorhandenes Passwort NICHT überschrieben.
-    - Optionales `create_backup`: legt `<config>.bak-YYYYmmddHHMMSS` an.
-    - `dry_run=True`: schreibt NICHT, liefert aber das resultierende Dict (Preview).
-
-    Parameters
-    ----------
-    config_path : str
-        Pfad zur config.json.
-    node : str
-        Ziel-Knoten unter `"sql"`.
-    new_entry : dict
-        Bereits validierter Eintrag (z. B. aus `build_config_candidate`).
-    create_backup : bool
-        Vor dem Schreiben eine Backup-Kopie erstellen.
-    keep_existing_password : bool
-        Vorhandenes Passwort behalten, wenn `new_entry` keins bereitstellt oder nur den Platzhalter enthält.
-    dry_run : bool
-        Kein persistenter Schreibvorgang, nur Simulation.
-
-    Returns
-    -------
-    info : dict
-        Informationen zum Update-Vorgang (`path`, `backup_path`, `previous_entry_masked`, `result_entry_masked`, `written`).
     """
-    # Validieren (früh)
     _validate_entry(new_entry)
-
-    # Bestehende Datei laden (oder leeres Dict)
     root = _load_json_file(config_path)
-
     if not isinstance(root, dict):
         raise ConfigUpdateError("Die Wurzel der config.json ist kein Objekt (Dict).")
-
     sql = root.get("sql")
-    if sql is None or not isinstance(sql, dict):
+    if not isinstance(sql, dict):
         sql = {}
         root["sql"] = sql
-
     prev: Dict[str, Any] = {}
     if node in sql and isinstance(sql[node], dict):
         prev = dict(sql[node])
 
-    # Passwort-Handling
     placeholder = "<<<SET_SECRET_HERE>>>"
     prev_password = prev.get("password")
     new_password = new_entry.get("password")
@@ -278,31 +510,22 @@ def apply_config_update(
     merged_entry.update(new_entry)
 
     if keep_existing_password:
-        # Falls der neue Eintrag kein Passwort mitliefert oder nur Placeholder → altes Passwort behalten
         if (new_password is None) or (isinstance(new_password, str) and new_password.strip() == placeholder):
             if prev_password:
                 merged_entry["password"] = prev_password
             else:
-                # Kein vorhandenes Passwort; wenn TrustedConnection, Passwort entfernen
-                if merged_entry.get("trusted_connection", False):
+                if str(merged_entry.get("auth", "")).lower() in ("trusted", "aad-integrated", "aad-interactive", "aad-msi"):
                     merged_entry.pop("password", None)
 
-    # Nochmals validieren nach Merge
     _validate_entry(merged_entry)
 
-    # Schreiben vorbereiten
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     backup_path = None
     if not dry_run and create_backup and os.path.exists(config_path):
         backup_path = f"{config_path}.bak-{timestamp}"
-        try:
-            shutil.copy2(config_path, backup_path)
-        except OSError as ex:
-            raise ConfigUpdateError(f"Backup konnte nicht erstellt werden: {backup_path} ({ex})") from ex
+        shutil.copy2(config_path, backup_path)
 
-    # Aktualisieren
     sql[node] = merged_entry
-
     if not dry_run:
         _save_json_atomic(config_path, root)
 
@@ -317,7 +540,7 @@ def apply_config_update(
 
 
 # =====================================
-#   Haupt-Workflow (unverändert + Flags)
+#   Diagnose orchestrieren (odbc_utils)
 # =====================================
 
 def connect_and_check(
@@ -332,58 +555,26 @@ def connect_and_check(
     dry_run: bool = False,
 ) -> Tuple[bool, Dict[str, Any], Optional[str], Optional[Dict[str, Any]]]:
     """
-    Lädt SQL-Settings, führt Diagnose durch und gibt optional einen validen config.json-Block zurück.
-    Optional kann der Block **persistiert** (in config.json geschrieben) werden.
-
-    Parameters
-    ----------
-    node : str
-        Knotenname in der config.json (z. B. "prod", "dev" oder "default").
-    show_drivers : bool
-        Verfügbare ODBC-Treiber (SQL Server) auflisten.
-    show_dsns : bool
-        Registrierte ODBC-DSNs auflisten.
-    return_config_json : bool
-        Wenn True, wird ein JSON-Block (String) erzeugt.
-    write_config : bool
-        Wenn True, wird die echte config.json aktualisiert (siehe `apply_config_update`).
-    config_path : str
-        Pfad zur config.json.
-    keep_existing_password : bool
-        Beim Schreiben vorhandenes Passwort erhalten, falls `new_entry` keins/Platzhalter enthält.
-    dry_run : bool
-        Schreibvorgang simulieren (kein persistentes Update).
-
-    Returns
-    -------
-    ok : bool
-        True, wenn mindestens ein Diagnose-Versuch erfolgreich war.
-    diag : dict
-        Vollständige Diagnostik inklusive Versuche und Hinweisen.
-    config_json : str | None
-        JSON-Block für `config.json` (nur wenn `return_config_json=True`).
-    write_info : dict | None
-        Ergebnis des Schreibvorgangs (nur wenn `write_config=True`), andernfalls None.
+    Lädt SQL-Settings, führt Diagnose (core.odbc_utils) durch und erzeugt/optional schreibt einen config.json-Block.
     """
-    print(f"\n=== Node: {node} ===")
+    # optionale Anzeigen
     if show_drivers:
-        print("ODBC-Treiber (SQL Server):", list_odbc_drivers())
+        print("ODBC-Treiber (SQL Server):", odbc_utils.list_odbc_drivers())
     if show_dsns:
-        print("ODBC-DSNs:", list_odbc_data_sources())
+        print("ODBC-DSNs:", odbc_utils.list_odbc_data_sources())
 
     settings, info = load_sql_settings(config_path=config_path, node=node, env_override=True)
     print("Quelle:", info.get("source"), "| Node:", info.get("node_path"))
     print("Settings:", settings.as_dict(mask_secrets=True))
 
-    # Diagnose
-    from graphfw.params.resolve import diagnose_with_fallbacks  # lokaler Import vermeidet Zyklus
-    ok, diag = diagnose_with_fallbacks(settings)
+    # Adapter -> odbc_utils
+    s_adapt = _adapt_for_odbc_utils(settings)
+    ok, diag = odbc_utils.diagnose_with_fallbacks(s_adapt)
     print(diag.get("summary", ""))
     for i, att in enumerate(diag.get("attempts", []), 1):
-        status = "OK" if att.get("ok", False) else ("OK" if att.get("method", "").startswith(("pyodbc", "ado", "pymssql")) and "error" not in att else "ERR")
         print(
-            f"  [{i:02d}] {att.get('method','?'):<18} | driver={att.get('driver') or att.get('provider')} "
-            f"| dsn={att.get('dsn') or '-'} | params={att.get('params') or ''} | {att.get('duration_s','-')}s"
+            f"  [{i:02d}] {att.get('method','?'):<18} | driver={att.get('driver') or att.get('provider') or '-'} "
+            f"| dsn={att.get('dsn') or '-'} | params={att.get('params') or att.get('conn_str_masked') or ''} | {att.get('duration_s','-')}s"
         )
         if "error" in att and att["error"]:
             print("       ", att["error"])
@@ -392,7 +583,6 @@ def connect_and_check(
         for s in diag["suggestions"]:
             print(" -", s)
 
-    # Konfigurationsvorschlag
     config_json: Optional[str] = None
     candidate_entry: Optional[Dict[str, Any]] = None
     if return_config_json or write_config:
