@@ -24,7 +24,7 @@ Parameter (öffentlich):
 
 Rückgabe:
     - build_csv_path(...): pathlib.Path
-    - write_csv(...):      pathlib.Path (Pfad der erzeugten Datei)
+    - write_csv(...):      pathlib.Path (Pfad der erzeugten Datei; auf Windows: WindowsPath)
 
 Abhängigkeiten:
     * Standardbibliothek; pandas-kompatible DataFrame API (df.to_csv).
@@ -37,7 +37,7 @@ Sicherheits-/Robustheitsverhalten:
     - Schreibvorgang ist deterministisch bzgl. Namensaufbau.
 
 Autor: Erhard Rainer (www.erhard-rainer.com)
-Version: 2.2.0 (2025-09-12)
+Version: 2.3.0 (2025-09-12)
 ===============================================================================
 """
 from __future__ import annotations
@@ -98,21 +98,31 @@ def write_csv(
 
     `directory` ist plattformneutral (Windows & Linux) dank `pathlib.Path`.
     `~` wird aufgelöst, relative Pfade sind erlaubt.
+
+    Rückgabe:
+        pathlib.Path – auf Windows ein `WindowsPath`, auf Linux ein `PosixPath`.
     """
     # 1) Basis-Dateiname (nur Name) gemäß Namensschema erzeugen
     name_only = build_csv_path(prefix=prefix, postfix=postfix, timestamp=timestamp).name
 
     # 2) Zielverzeichnis auflösen (Standard: aktuelles Arbeitsverzeichnis)
-    base_dir = Path.cwd() if directory is None else Path(directory).expanduser()
+    base_dir = _normalize_directory(directory)
 
-    # 3) Zielpfad zusammensetzen
+    # 3) Zielpfad zusammensetzen (zunächst ohne Eindeutigkeits-Suffix)
     target = base_dir / name_only
 
     # 4) Eindeutigen Namen bestimmen, falls nicht überschrieben werden soll
     if target.exists() and not overwrite:
         target = _next_free_path(target)
 
-    # 5) Verzeichnis anlegen und CSV schreiben
+    # 5) Sicherstellen, dass wir einen absoluten, normalisierten Pfad zurückgeben
+    try:
+        target = target.expanduser().resolve(strict=False)
+    except Exception:
+        # Fallback: expanduser ist ausreichend
+        target = target.expanduser()
+
+    # 6) Verzeichnis anlegen und CSV schreiben
     target.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(target, index=index, encoding=encoding, date_format=date_format)
 
@@ -120,6 +130,22 @@ def write_csv(
 
 
 # --------------------------- Hilfsfunktionen (intern) ---------------------------
+
+def _normalize_directory(directory: Optional[PathLike]) -> Path:
+    """
+    Normalisiert das Zielverzeichnis zu einem absoluten Path-Objekt.
+    Auf Windows ergibt das ein `WindowsPath`, auf Linux ein `PosixPath`.
+    """
+    if directory is None or (isinstance(directory, str) and not directory.strip()):
+        base = Path.cwd()
+    else:
+        base = Path(directory).expanduser()
+        if not base.is_absolute():
+            base = Path.cwd() / base
+    try:
+        return base.resolve(strict=False)
+    except Exception:
+        return base
 
 
 def _next_free_path(path: Path, *, width: int = 3) -> Path:
