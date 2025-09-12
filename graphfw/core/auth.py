@@ -25,11 +25,12 @@ Beispiel:
     token = tp.get_access_token()                # Standard-Scope (.default)
 
 Autor: Erhard Rainer (www.erhard-rainer.com)
-Version: 1.2.0 (2025-09-12)
+Version: 1.3.0 (2025-09-12)
 
 Änderungsprotokoll
 ------------------
 2025-09-12 - ER - Ergänzt: from_env(); get_access_token/get_token unterstützen optionalen Status-Rückgabemodus (token, succeeded, error_message).
+2025-09-12 - ER - Version-Attribut hinzugefügt: TokenProvider.__version__ und Modul-__version__.
 ===============================================================================
 """
 from __future__ import annotations
@@ -42,6 +43,9 @@ import os
 import threading
 
 import msal
+
+# Modulweite Version (kann separat abgefragt werden: graphfw.core.auth.__version__)
+__version__ = "1.3.0"
 
 _GRAPH_DEFAULT_SCOPE = "https://graph.microsoft.com/.default"
 
@@ -75,6 +79,10 @@ class TokenProvider:
     - get_access_token() ist mit einem Lock geschützt, da MSAL bei parallelem
       Zugriff auf dieselbe CCA-Instanz nicht strikt threadsicher sein muss.
     """
+
+    # Klassenweite Version (abfragbar via TokenProvider.__version__)
+    __version__ = __version__
+
     tenant_id: str
     client_id: str
     client_secret: str
@@ -295,4 +303,4 @@ class TokenProvider:
         return f"TokenProvider(tenant_id='{self.tenant_id}', client_id='{sid}', cache_path={self.cache_path})"
 
 
-__all__ = ["TokenProvider"]
+__all__ = ["TokenProvider", "__version__"]
