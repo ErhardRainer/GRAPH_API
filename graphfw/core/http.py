@@ -1,4 +1,3 @@
-# http.py
 # -*- coding: utf-8 -*-
 """
 ===============================================================================
@@ -13,9 +12,12 @@ Zweck:
         * Schlanke JSON-Deserialisierung (odata.metadata=none)
 
     - Methoden:
-        * request()    – generisch (GET/POST/…)
-        * get_json()   – GET + JSON
-        * get_paged()  – Generator über Items (value) oder Seiten
+        * request()       – generisch (GET/POST/…)
+        * request_json()  – generisch + JSON
+        * get_json()      – GET + JSON
+        * get()           – GET, Response-Objekt (Kompatibilität)
+        * call()          – Alias zu request() (Kompatibilität)
+        * get_paged()     – Generator über Items (value) oder Seiten
 
 Abhängigkeiten:
     pip install requests
@@ -29,20 +31,44 @@ Beispiel:
     data = gc.get_json("/me")
 
 Autor: Erhard Rainer (www.erhard-rainer.com)
-Version: 1.0.0 (2025-09-11)
+Version: 1.1.2 (2025-09-13)
+
+Änderungsprotokoll:
+    v1.1.2 (2025-09-13)
+        - Typo in Typannotationen behoben: Optional[Mapping[str, Any]] (statt Optional{...}).
+        - Kleinere Lint-/Hint-Korrekturen.
+
+    v1.1.1 (2025-09-13)
+        - __version__ Konstante ergänzt und im User-Agent referenziert.
+        - Docstring-Changelog hinzugefügt.
+
+    v1.1.0 (2025-09-13)
+        - Kompatibilitätsmethoden ergänzt: request_json(), get(), call().
+        - last_retries Feld hinzugefügt (Diagnostics).
+        - get_paged() robuster: akzeptiert absolute nextLink-URLs ohne erneut params anzuhängen.
+        - _normalize_params() verbessert: akzeptiert 'select'/'filter' etc. und mappt auf '$select'/'$filter'.
+        - ConsistencyLevel-Auto-Set bei $search/$count beibehalten.
+        - Logging-Hooks (self.log?.warning/error) defensiv.
+
+    v1.0.0 (2025-09-11)
+        - Erste Version: request(), get_json(), get_paged(), Retry/Backoff.
 ===============================================================================
 """
 from __future__ import annotations
 
 import time
 import random
-from typing import Any, Dict, Generator, Iterable, Mapping, Optional, Tuple, Union
+from typing import Any, Dict, Generator, Iterable, Mapping, Optional
 from urllib.parse import urljoin
 
 import requests
 
+__all__ = ["GraphClient"]
+__version__ = "1.1.2"
 
-_KNOWN_ODATA_PARAMS = {"$select", "$expand", "$filter", "$orderby", "$top", "$skip", "$count", "$search"}
+_KNOWN_ODATA_PARAMS = {
+    "$select", "$expand", "$filter", "$orderby", "$top", "$skip", "$count", "$search"
+}
 _JSON_ACCEPT = "application/json;odata.metadata=none"
 
 
@@ -52,14 +78,13 @@ def _needs_consistency_level(params: Optional[Mapping[str, Any]]) -> bool:
         return False
     keys = set(params.keys())
     # Falls ohne $ übergeben (z. B. 'search' statt '$search'), berücksichtigen
-    if "$count" in keys or "$search" in keys or "count" in keys or "search" in keys:
-        return True
-    return False
+    return any(k in keys for k in ("$count", "$search", "count", "search"))
 
 
 def _normalize_params(params: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     """
     Erlaubt sowohl '$select' als auch 'select' etc.; normalisiert auf '$…'.
+    Unbekannte Keys bleiben unverändert.
     """
     if not params:
         return {}
@@ -68,9 +93,8 @@ def _normalize_params(params: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
         if k in _KNOWN_ODATA_PARAMS:
             out[k] = v
         else:
-            # 'select' -> '$select' usw., falls bekannt; ansonsten unverändert
-            k_norm = f"${k}" if f"${k}" in _KNOWN_ODATA_PARAMS else k
-            out[k_norm] = v
+            k_dollar = f"${k}"
+            out[k_dollar if k_dollar in _KNOWN_ODATA_PARAMS else k] = v
     return out
 
 
@@ -101,9 +125,12 @@ class GraphClient:
         self.timeout = int(timeout)
         self.max_retries = int(max_retries)
         self.backoff_factor = float(backoff_factor)
-        self.user_agent = user_agent or "graphfw/1.0 (+https://graph.microsoft.com)"
+        self.user_agent = user_agent or f"graphfw/{__version__} (+https://graph.microsoft.com)"
         self.session = session or requests.Session()
         self.log = log  # sollte .log(level,msg,**ctx) oder .info(...) unterstützen (wenn vorhanden)
+
+        # Diagnostics
+        self.last_retries: int = 0  # Anzahl wiederholter Versuche beim letzten request()
 
     # ------------------------------- Kernaufruf --------------------------------
 
@@ -124,7 +151,7 @@ class GraphClient:
         """
         Führt einen HTTP-Request mit Retry-Logik aus.
 
-        - expected: Liste erlaubter Statuscodes (default: 200)
+        - expected: Iterable erlaubter Statuscodes (default: (200,))
         - consistency_level: z. B. "eventual" (überschreibt Auto-Erkennung)
         - retry: Anzahl Versuche (default: self.max_retries)
 
@@ -150,7 +177,7 @@ class GraphClient:
         # Retry-Schleife
         retries_left = self.max_retries if retry is None else int(retry)
         attempt = 0
-        last_exc: Optional[Exception] = None
+        self.last_retries = 0
 
         while True:
             attempt += 1
@@ -164,8 +191,7 @@ class GraphClient:
                     data=data,
                     timeout=timeout or self.timeout,
                 )
-            except Exception as ex:
-                last_exc = ex
+            except Exception:
                 if attempt > retries_left:
                     if self.log:
                         try:
@@ -177,6 +203,7 @@ class GraphClient:
                 continue
 
             if resp.status_code in expected:
+                self.last_retries = max(0, attempt - 1)
                 return resp
 
             # Retry-Kandidat? (429 oder 5xx)
@@ -200,16 +227,55 @@ class GraphClient:
             # Nicht erfolgreich und kein Retry mehr
             try:
                 resp.raise_for_status()
-            except Exception as ex:
+            except Exception:
+                self.last_retries = max(0, attempt - 1)
                 if self.log:
                     try:
-                        self.log.error("HTTP error", url=url, method=method, status=resp.status_code, text=self._safe_text(resp))
+                        self.log.error(
+                            "HTTP error",
+                            url=url,
+                            method=method,
+                            status=resp.status_code,
+                            text=self._safe_text(resp),
+                            attempt=attempt,
+                        )
                     except Exception:
                         pass
                 raise
+
+            self.last_retries = max(0, attempt - 1)
             return resp  # falls expected andere Codes enthält (z. B. 204)
 
-    # ------------------------------- Hilfen ------------------------------------
+    # ------------------------------- Convenience -------------------------------
+
+    def request_json(
+        self,
+        method: str,
+        path_or_url: str,
+        *,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        json: Optional[Any] = None,
+        data: Optional[Any] = None,
+        expected: Iterable[int] = (200,),
+        timeout: Optional[int] = None,
+        consistency_level: Optional[str] = None,
+        retry: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Generischer Aufruf + JSON-Decoding (dict)."""
+        resp = self.request(
+            method,
+            path_or_url,
+            params=params,
+            headers=headers,
+            json=json,
+            data=data,
+            expected=expected,
+            timeout=timeout,
+            consistency_level=consistency_level,
+            retry=retry,
+        )
+        return resp.json()
 
     def get_json(
         self,
@@ -222,7 +288,7 @@ class GraphClient:
         consistency_level: Optional[str] = None,
     ) -> Dict[str, Any]:
         """GET + JSON-Decoding (dict)."""
-        resp = self.request(
+        return self.request_json(
             "GET",
             path_or_url,
             params=params,
@@ -231,7 +297,76 @@ class GraphClient:
             timeout=timeout,
             consistency_level=consistency_level,
         )
-        return resp.json()
+
+    # Kompatibilitätsmethoden für bestehende/andere Module ---------------------
+
+    def get(
+        self,
+        path_or_url: str,
+        *,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        expected: Iterable[int] = (200,),
+        timeout: Optional[int] = None,
+        consistency_level: Optional[str] = None,
+    ) -> requests.Response:
+        """
+        GET, liefert ein requests.Response-Objekt.
+        Dient der Kompatibilität zu Code, der .get(...) erwartet.
+        """
+        return self.request(
+            "GET",
+            path_or_url,
+            params=params,
+            headers=headers,
+            expected=expected,
+            timeout=timeout,
+            consistency_level=consistency_level,
+        )
+
+    def call(
+        self,
+        method: str,
+        path_or_url: str,
+        *,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        json: Optional[Any] = None,
+        data: Optional[Any] = None,
+        expected: Iterable[int] = (200,),
+        timeout: Optional[int] = None,
+        consistency_level: Optional[str] = None,
+        retry: Optional[int] = None,
+    ) -> requests.Response:
+        """Alias zu request(); bereitgestellt für breite API-Kompatibilität."""
+        return self.request(
+            method,
+            path_or_url,
+            params=params,
+            headers=headers,
+            json=json,
+            data=data,
+            expected=expected,
+            timeout=timeout,
+            consistency_level=consistency_level,
+            retry=retry,
+        )
+
+    # JSON-Schreibmethoden (Quality-of-Life) -----------------------------------
+
+    def post_json(self, path_or_url: str, *, json: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self.request_json("POST", path_or_url, json=json, **kwargs)
+
+    def patch_json(self, path_or_url: str, *, json: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self.request_json("PATCH", path_or_url, json=json, **kwargs)
+
+    def put_json(self, path_or_url: str, *, json: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self.request_json("PUT", path_or_url, json=json, **kwargs)
+
+    def delete_json(self, path_or_url: str, **kwargs: Any) -> Dict[str, Any]:
+        return self.request_json("DELETE", path_or_url, **kwargs)
+
+    # ------------------------------- Paging ------------------------------------
 
     def get_paged(
         self,
@@ -309,6 +444,3 @@ class GraphClient:
         except Exception:
             return ""
         return t if len(t) <= limit else t[:limit] + " …"
-
-
-__all__ = ["GraphClient"]

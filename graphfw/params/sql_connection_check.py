@@ -10,7 +10,7 @@ Zweck
 -----
 Diagnose- und Hilfsmodul für SQL-Verbindungsparameter in `config.json`.
 Das Modul liest bestehende Einstellungen (inkl. optionaler ENV-Overrides),
-führt eine Konnektivitätsdiagnose via `graphfw.core.odbc_utils` durch, leitet
+führt eine Konnektivitätsdiagnose via **graphfw.core.odbc_utils** durch, leitet
 daraus einen belastbaren Konfigurationskandidaten ab und kann diesen wahlweise:
 
   1) als JSON-Block ausgeben (zum Copy/Paste), oder
@@ -29,12 +29,12 @@ Pro Node werden u. a. diese Felder unterstützt:
       "driver": "ODBC Driver 18 for SQL Server",
       "auth": "sql" | "trusted" | "aad-password" | "aad-integrated"
               | "aad-interactive" | "aad-msi" | "aad-sp",
-      "params": { ... }   # Dict, z.B. {"TrustServerCertificate": "yes", "Encrypt": "yes"}
+      "params": { ... }   # Dict, z. B. {"TrustServerCertificate": "yes", "Encrypt": "yes"}
     }
 
-- `auth` wird beibehalten und in die Diagnose übersetzt (Trusted Connection etc.).
-- `params` wird als **Dict** gelesen; für die Diagnose wird ein **ODBC-Query-String**
-  erzeugt (z. B. `Encrypt=yes&TrustServerCertificate=yes`).
+- `auth` wird beibehalten und in der Diagnose berücksichtigt.
+- `params` wird als **Dict** gelesen; falls Diagnosedaten einen String liefern,
+  wird er in ein Dict zurücktransformiert.
 
 Sicherheitsprinzipien
 ---------------------
@@ -80,17 +80,17 @@ Umgebungsvariablen berücksichtigt (best effort):
 
 Änderungsprotokoll (Change Log)
 -------------------------------
-2025-09-12 (ER)
-  - **Integration `graphfw.core.odbc_utils`**: Diagnose, Treiber- und DSN-Auflistung
-    laufen jetzt über das zentrale Modul (`diagnose_with_fallbacks`,
-    `list_odbc_drivers`, `list_odbc_data_sources`).
-  - Settings-Adapter eingeführt, der `auth`/`params` (Dict) in das von
-    `odbc_utils` erwartete Attr-Format (inkl. `params`-Querystring) überführt.
-  - Bestehende API, Sicherheits- und Schreiblogik unverändert beibehalten.
+2025-09-13 (ER)
+  - **Fix:** Loader & Diagnose wie im funktionierenden Altcode:
+      * Import jetzt aus `graphfw.core.config` (`load_sql_settings`) statt `params.resolve`.
+      * Diagnose & Auflistungen direkt aus `graphfw.core.odbc_utils` importiert.
+  - Fallback-Loader nur noch als Reserve, falls `core.config` nicht existiert.
+  - Params-Parsing verbessert: String<->Dict Konvertierung konsistent.
+  - Ausgabe/Protokollierung an Altcode angeglichen.
 
 2025-09-12 (ER)
-  - Anpassung an das JSON-Schema (auth/params als Dict), erweiterte Validierung.
-  - Robuste Loader-Fallbacks, atomare Writes/Backup, Secret-Erhalt.
+  - Integration `graphfw.core.odbc_utils`; Settings-Adapter für auth/params.
+  - Anpassung an JSON-Schema; Validierung; atomare Writes/Backup; Secret-Erhalt.
 
 2025-09-11 (ER)
   - `build_config_candidate(...)`: deterministische Schlüsselreihenfolge; Passwort-
@@ -110,45 +110,56 @@ import os
 import shutil
 import tempfile
 from datetime import datetime
-from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
-# Optional: nur für quick_check; kann entfernt werden wenn nicht genutzt
+# Optional: nur für quick_check; kann entfernt werden, wenn nicht genutzt
 try:
     from sqlalchemy import text  # type: ignore
 except Exception:  # pragma: no cover
     text = None  # type: ignore
 
-# Zentrale ODBC-Diagnose & Utilities
-from graphfw.core import odbc_utils  # nutzt: list_odbc_drivers, list_odbc_data_sources, diagnose_with_fallbacks
-
-# =========================
-#   Kompatibler Settings-Loader
-# =========================
-_LOAD_SQL_SETTINGS = None
-_LOAD_SETTINGS_GENERIC = None
-_CONFIG_PATH_FROM_RESOLVE = None
+# --- Primär: genau wie im funktionierenden Altcode ---------------------------
 try:
-    from graphfw.params.resolve import load_sql_settings as _LOAD_SQL_SETTINGS  # type: ignore
+    from graphfw.core.config import (  # type: ignore
+        load_sql_settings as _LOAD_SQL_SETTINGS_PRIMARY,
+    )
 except Exception:
-    pass
+    _LOAD_SQL_SETTINGS_PRIMARY = None  # type: ignore
 
 try:
-    from graphfw.params.resolve import load_settings as _LOAD_SETTINGS_GENERIC  # type: ignore
-except Exception:
-    pass
+    from graphfw.core.odbc_utils import (  # type: ignore
+        list_odbc_drivers,
+        list_odbc_data_sources,
+        diagnose_with_fallbacks,
+    )
+except Exception as _ex:  # pragma: no cover
+    # Minimaler Fallback (sollte in deinem Repo nicht gebraucht werden)
+    def list_odbc_drivers(*args, **kwargs):  # type: ignore
+        return []
 
+    def list_odbc_data_sources(*args, **kwargs):  # type: ignore
+        return {}
+
+    def diagnose_with_fallbacks(settings, *args, **kwargs):  # type: ignore
+        return False, {
+            "summary": "Diagnose nicht verfügbar (Fallback).",
+            "attempts": [],
+            "suggestions": [
+                "Stelle sicher, dass graphfw.core.odbc_utils vorhanden ist.",
+            ],
+        }
+
+# --- Sekundär: Fallback-Loader (wenn `core.config` nicht vorhanden) ----------
 try:
     from graphfw.params.resolve import CONFIG_PATH as _CONFIG_PATH_FROM_RESOLVE  # type: ignore
 except Exception:
-    pass
+    _CONFIG_PATH_FROM_RESOLVE = None  # type: ignore
 
 CONFIG_PATH = (
     _CONFIG_PATH_FROM_RESOLVE
     if _CONFIG_PATH_FROM_RESOLVE
     else os.environ.get("GRAPHFW_CONFIG_PATH", "config.json")
 )
-
 
 class _SimpleSettings:
     """Minimaler Settings-Wrapper mit as_dict(mask_secrets=...) kompatibel zur bisherigen Nutzung."""
@@ -163,10 +174,8 @@ class _SimpleSettings:
                     d[k] = "******"
         return d
 
-
 def _split_node_path(node_path: str) -> List[str]:
     return [p for p in (node_path or "").split(".") if p]
-
 
 def _simple_load_sql_settings(config_path: str, node: str, env_override: bool = True) -> Tuple[_SimpleSettings, Dict[str, Any]]:
     """
@@ -199,16 +208,15 @@ def _simple_load_sql_settings(config_path: str, node: str, env_override: bool = 
             "username": ["SQL_USERNAME", "DB_USER", "USER"],
             "password": ["SQL_PASSWORD", "DB_PASSWORD", "PASSWORD"],
             "driver": ["SQL_DRIVER", "ODBC_DRIVER"],
-            "dsn": ["SQL_DSN", "ODBC_DSN"],  # falls DSN genutzt wird
+            "dsn": ["SQL_DSN", "ODBC_DSN"],
             "auth": ["SQL_AUTH"],
             "trusted_connection": ["SQL_TRUSTED_CONNECTION"],
-            "encrypt": ["SQL_ENCRYPT"],  # nur zur Kompatibilität; eigentl. in params
         }
         for key, env_keys in env_map.items():
             for ek in env_keys:
                 if ek in os.environ and os.environ[ek] != "":
                     val: Any = os.environ[ek]
-                    if key in ("trusted_connection", "encrypt"):
+                    if key == "trusted_connection":
                         val = str(val).lower() in ("1", "true", "yes", "y")
                     cur[key] = val
                     break
@@ -222,20 +230,15 @@ def _simple_load_sql_settings(config_path: str, node: str, env_override: bool = 
 
     return _SimpleSettings(cur), info
 
-
 def load_sql_settings(config_path: str, node: str, env_override: bool = True):
     """
-    Kompatibler Entry-Point: nutzt (in dieser Reihenfolge)
-    - graphfw.params.resolve.load_sql_settings
-    - graphfw.params.resolve.load_settings(section='sql')
-    - _simple_load_sql_settings (dieses Modul)
+    Kompatibler Entry-Point:
+      1) `graphfw.core.config.load_sql_settings` (wie im Altcode)
+      2) interner Fallback-Loader (nur falls 1) fehlt)
     """
-    if callable(_LOAD_SQL_SETTINGS):
-        return _LOAD_SQL_SETTINGS(config_path=config_path, node=node, env_override=env_override)  # type: ignore
-    if callable(_LOAD_SETTINGS_GENERIC):
-        return _LOAD_SETTINGS_GENERIC(config_path=config_path, node=node, env_override=env_override, section="sql")  # type: ignore
+    if callable(_LOAD_SQL_SETTINGS_PRIMARY):
+        return _LOAD_SQL_SETTINGS_PRIMARY(config_path=config_path, node=node, env_override=env_override)  # type: ignore
     return _simple_load_sql_settings(config_path=config_path, node=node, env_override=env_override)
-
 
 # =========================
 #   Diagnose + Kandidat bauen
@@ -248,23 +251,18 @@ def quick_check(engine) -> Any:
     with engine.connect() as c:
         return c.execute(text("SELECT 1")).scalar()
 
-
 def show_settings(settings) -> None:
     """Kompakte, maskierte Ausgabe gängiger Felder."""
     d = settings.as_dict(mask_secrets=True)
     keys = ("server", "db_name", "username", "driver", "dsn", "auth", "params")
     print({k: d[k] for k in keys if k in d})
 
-
-def _first_ok_attempt(diag: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    for att in diag.get("attempts", []):
-        if att.get("ok"):
-            return att
-    return None
-
-
 def _normalize_settings_dict(settings) -> Dict[str, Any]:
     d = settings.as_dict(mask_secrets=False) if hasattr(settings, "as_dict") else dict(settings or {})
+    # params kann Dict ODER String sein – beides unterstützen
+    params = d.get("params")
+    if isinstance(params, str):
+        params = _parse_params_qs(params)
     norm = {
         "server": d.get("server") or d.get("host") or d.get("hostname"),
         "db_name": d.get("db_name") or d.get("database") or d.get("db"),
@@ -274,65 +272,30 @@ def _normalize_settings_dict(settings) -> Dict[str, Any]:
         "dsn": d.get("dsn"),
         "auth": d.get("auth"),
         "trusted_connection": d.get("trusted_connection"),
-        "encrypt": d.get("encrypt"),  # meist in params geführt
-        "params": d.get("params") or d.get("options"),
+        "params": params if isinstance(params, dict) else (d.get("options") if isinstance(d.get("options"), dict) else None),
     }
-    # Nur nicht-leere Werte
-    out = {k: v for k, v in norm.items() if v not in (None, "")}
-    # Stelle sicher: params ist ein Dict (wenn vorhanden)
-    if "params" in out and not isinstance(out["params"], dict):
-        out["params"] = {"Raw": out["params"]}
+    return {k: v for k, v in norm.items() if v not in (None, "")}
+
+def _parse_params_qs(qs: Optional[str]) -> Dict[str, str]:
+    """ODBC-Querystring (k=v&...) -> Dict."""
+    out: Dict[str, str] = {}
+    if not qs:
+        return out
+    for piece in str(qs).split("&"):
+        piece = piece.strip()
+        if not piece:
+            continue
+        if "=" in piece:
+            k, v = piece.split("=", 1)
+        else:
+            k, v = piece, ""
+        out[k] = v
     return out
 
-
-def _dict_params_to_query(params: Optional[Dict[str, Any]]) -> str:
-    """params-Dict -> ODBC-Querystring (k=v&...). Werte werden str()-konvertiert."""
-    if not params:
-        return ""
-    parts = []
-    for k, v in params.items():
-        if v is None:
-            continue
-        parts.append(f"{k}={v}")
-    return "&".join(parts)
-
-
-def _adapt_for_odbc_utils(settings) -> SimpleNamespace:
-    """
-    Baut ein Objekt mit Attributzugriff, wie es `core.odbc_utils` erwartet.
-    - params wird als Querystring bereitgestellt (nicht Dict).
-    - Trusted_Connection wird aus `auth`/'trusted_connection'/'params' heuristisch abgeleitet.
-    """
-    d = _normalize_settings_dict(settings)
-
-    # params: Dict -> Querystring
-    params_qs = _dict_params_to_query(d.get("params"))
-    auth = str(d.get("auth") or "").lower()
-
-    # Trusted_Connection Heuristik
-    tc_flag = bool(d.get("trusted_connection"))
-    if not tc_flag and auth == "trusted":
-        tc_flag = True
-    if tc_flag and "TrustedServerCertificate" not in params_qs and "Trusted_Connection" not in params_qs:
-        # sicherstellen, dass die Info in params landet (odbc_utils prüft params.lower())
-        add = "Trusted_Connection=yes"
-        params_qs = (params_qs + "&" + add) if params_qs else add
-
-    return SimpleNamespace(
-        server=d.get("server"),
-        db_name=d.get("db_name"),
-        username=d.get("username"),
-        password=d.get("password"),
-        driver=d.get("driver"),
-        dsn=d.get("dsn"),
-        auth=d.get("auth"),
-        params=params_qs,
-        trusted_connection=tc_flag,
-        encrypt=d.get("encrypt"),
-    )
-
-
 def _extract_from_attempt(att: Dict[str, Any]) -> Dict[str, Any]:
+    params = att.get("params")
+    if isinstance(params, str):
+        params = _parse_params_qs(params)
     candidates = {
         "driver": att.get("driver") or att.get("provider"),
         "dsn": att.get("dsn"),
@@ -341,21 +304,9 @@ def _extract_from_attempt(att: Dict[str, Any]) -> Dict[str, Any]:
         "username": att.get("username") or att.get("user"),
         "auth": att.get("auth"),
         "trusted_connection": att.get("trusted_connection"),
-        "encrypt": att.get("encrypt"),
-        "params": att.get("params"),
+        "params": params if isinstance(params, dict) else None,
     }
-    # params im Attempt kann auch String sein -> in Dict heben (best-effort)
-    if isinstance(candidates.get("params"), str):
-        raw = candidates["params"]
-        d: Dict[str, str] = {}
-        for piece in raw.split("&"):
-            if not piece or "=" not in piece:
-                continue
-            k, v = piece.split("=", 1)
-            d[k] = v
-        candidates["params"] = d
     return {k: v for k, v in candidates.items() if v not in (None, "")}
-
 
 def _merge_preferring_left(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(a)
@@ -364,7 +315,6 @@ def _merge_preferring_left(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, An
             out[k] = v
     return out
 
-
 def _infer_auth_from_flags(d: Dict[str, Any]) -> Optional[str]:
     if d.get("trusted_connection") is True:
         return "trusted"
@@ -372,28 +322,30 @@ def _infer_auth_from_flags(d: Dict[str, Any]) -> Optional[str]:
         return d.get("auth") or "sql"
     return d.get("auth")
 
-
 def build_config_candidate(settings, diag: Dict[str, Any]) -> Dict[str, Any]:
     """
     Baut einen Kandidaten entsprechend deinem Schema (inkl. 'auth' und params als Dict).
     Gibt **keine** echten Passwörter aus – Platzhalter wenn nötig.
     """
     base = _normalize_settings_dict(settings)
-    best = _first_ok_attempt(diag)
-    from_attempt = _extract_from_attempt(best) if best else {}
+    best = None
+    for att in diag.get("attempts", []):
+        if att.get("ok"):
+            best = att
+            break
+    from_attempt = _extract_from_attempt(best or {}) if best else {}
     merged = _merge_preferring_left(from_attempt, base)
 
-    has_dsn = bool(merged.get("dsn"))
     config_entry: Dict[str, Any] = {}
-
-    if has_dsn:
+    # DSN bevorzugen, falls vorhanden
+    if merged.get("dsn"):
         config_entry["dsn"] = merged["dsn"]
 
     for key in ("driver", "server", "db_name", "username", "auth", "trusted_connection"):
         if key in merged:
             config_entry[key] = merged[key]
 
-    if "params" in merged and isinstance(merged["params"], dict):
+    if isinstance(merged.get("params"), dict) and merged["params"]:
         config_entry["params"] = merged["params"]
 
     if "auth" not in config_entry or not config_entry["auth"]:
@@ -410,14 +362,11 @@ def build_config_candidate(settings, diag: Dict[str, Any]) -> Dict[str, Any]:
         "dsn", "driver", "server", "db_name", "username", "password",
         "auth", "trusted_connection", "params",
     ]
-    config_entry = {k: config_entry[k] for k in ordered_keys if k in config_entry}
-    return config_entry
-
+    return {k: config_entry[k] for k in ordered_keys if k in config_entry}
 
 def render_config_json(node: str, entry: Dict[str, Any]) -> str:
     payload = {"sql": {node: entry}}
     return json.dumps(payload, ensure_ascii=False, indent=2)
-
 
 # =====================================
 #   Config schreiben (atomar)
@@ -425,7 +374,6 @@ def render_config_json(node: str, entry: Dict[str, Any]) -> str:
 
 class ConfigUpdateError(RuntimeError):
     """Fehler beim Lesen/Schreiben/Mergen der config.json."""
-
 
 def _load_json_file(path: str) -> Dict[str, Any]:
     if not os.path.exists(path):
@@ -438,15 +386,14 @@ def _load_json_file(path: str) -> Dict[str, Any]:
     except OSError as ex:
         raise ConfigUpdateError(f"config.json konnte nicht gelesen werden: {path} ({ex})") from ex
 
-
 def _save_json_atomic(path: str, data: Dict[str, Any]) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp_fd, tmp_path = tempfile.mkstemp(prefix=".config.json.", suffix=".tmp", dir=os.path.dirname(path) or ".")
+    fd, tmp_path = tempfile.mkstemp(prefix=".config.json.", suffix=".tmp", dir=os.path.dirname(path) or ".")
     try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
             f.write("\n")
-        os.replace(tmp_path, path)  # atomic on same filesystem
+        os.replace(tmp_path, path)
     except OSError as ex:
         try:
             os.remove(tmp_path)
@@ -454,30 +401,21 @@ def _save_json_atomic(path: str, data: Dict[str, Any]) -> None:
             pass
         raise ConfigUpdateError(f"config.json konnte nicht geschrieben werden: {path} ({ex})") from ex
 
-
 def _mask_password(v: Any) -> Any:
     if isinstance(v, str) and v:
         return "******"
     return v
 
-
 def _validate_entry(entry: Dict[str, Any]) -> None:
-    """
-    Basale Validierung je nach 'auth'.
-    """
-    if "dsn" in entry and entry["dsn"]:
-        pass
-    else:
+    if not entry.get("dsn"):
         need = [k for k in ("driver", "server", "db_name") if not entry.get(k)]
         if need:
             raise ConfigUpdateError(f"Ungültiger SQL-Eintrag: fehlende Felder {need}. "
                                     f"Erforderlich: DSN ODER (driver, server, db_name).")
-
     auth = str(entry.get("auth") or "").lower()
     if auth in ("sql", "aad-password", "aad-sp"):
         if entry.get("password", None) == "":
             raise ConfigUpdateError("Password ist leerer String. Entfernen oder Platzhalter/Secret verwenden.")
-
 
 def apply_config_update(
     *,
@@ -499,6 +437,7 @@ def apply_config_update(
     if not isinstance(sql, dict):
         sql = {}
         root["sql"] = sql
+
     prev: Dict[str, Any] = {}
     if node in sql and isinstance(sql[node], dict):
         prev = dict(sql[node])
@@ -538,9 +477,8 @@ def apply_config_update(
     }
     return info
 
-
 # =====================================
-#   Diagnose orchestrieren (odbc_utils)
+#   Diagnose orchestrieren (wie Altcode)
 # =====================================
 
 def connect_and_check(
@@ -557,26 +495,25 @@ def connect_and_check(
     """
     Lädt SQL-Settings, führt Diagnose (core.odbc_utils) durch und erzeugt/optional schreibt einen config.json-Block.
     """
-    # optionale Anzeigen
+    print(f"\n=== Node: {node} ===")
     if show_drivers:
-        print("ODBC-Treiber (SQL Server):", odbc_utils.list_odbc_drivers())
+        print("ODBC-Treiber (SQL Server):", list_odbc_drivers())
     if show_dsns:
-        print("ODBC-DSNs:", odbc_utils.list_odbc_data_sources())
+        print("ODBC-DSNs:", list_odbc_data_sources())
 
     settings, info = load_sql_settings(config_path=config_path, node=node, env_override=True)
     print("Quelle:", info.get("source"), "| Node:", info.get("node_path"))
     print("Settings:", settings.as_dict(mask_secrets=True))
 
-    # Adapter -> odbc_utils
-    s_adapt = _adapt_for_odbc_utils(settings)
-    ok, diag = odbc_utils.diagnose_with_fallbacks(s_adapt)
+    ok, diag = diagnose_with_fallbacks(settings)
     print(diag.get("summary", ""))
     for i, att in enumerate(diag.get("attempts", []), 1):
+        status = "OK" if (att.get("ok") or ("error" not in att)) else "ERR"
         print(
             f"  [{i:02d}] {att.get('method','?'):<18} | driver={att.get('driver') or att.get('provider') or '-'} "
-            f"| dsn={att.get('dsn') or '-'} | params={att.get('params') or att.get('conn_str_masked') or ''} | {att.get('duration_s','-')}s"
+            f"| params={att.get('params') or att.get('conn_str_masked') or ''} | {att.get('duration_s','-')}s"
         )
-        if "error" in att and att["error"]:
+        if att.get("error"):
             print("       ", att["error"])
     if diag.get("suggestions"):
         print("\nHinweise:")
